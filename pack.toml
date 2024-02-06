@@ -1,0 +1,5 @@
+[custom.all.verilog-dtc]
+type = "local"
+path = "."
+ipkg = "verilog-dtc.ipkg"
+#test = "tests/tests.ipkg"
