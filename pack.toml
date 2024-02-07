@@ -1,5 +1,25 @@
+#################
+### The model ###
+#################
+
 [custom.all.verilog-dtc]
 type = "local"
 path = "."
 ipkg = "verilog-dtc.ipkg"
 #test = "tests/tests.ipkg"
+
+#############################
+### Upstream dependencies ###
+#############################
+
+[custom.all.deptycheck]
+type   = "git"
+url    = "https://github.com/buzden/deptycheck"
+commit = "latest:master"
+ipkg   = "deptycheck.ipkg"
+
+[custom.all.elab-util]
+type   = "git"
+url    = "https://github.com/buzden/idris2-elab-util"
+commit = "latest:pre-con-overhaul"
+ipkg   = "elab-util.ipkg"
