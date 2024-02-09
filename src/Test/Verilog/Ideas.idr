@@ -70,3 +70,45 @@ namespace SuccessiveAdditionsFirther
              (sub : Fin av.length) ->
              Module av (sub::ss) sig (?foo (List.allFins $ inputs $ av `at` sub) ++ map (mapSnd (\(_ ** x) => (_ ** ?fooo))) uns)
 
+namespace InductionOnInputs
+
+  -- For each input of an element of a circuit, there must be precisely one wire connecting something to it.
+  -- A keen observation is that, if `I` is a set of inputs of all elements and `O` is a set of outputs of all elements,
+  -- then such circuits are representable precisely by total functions `I -> O`. Moreover, since `I` and `O` are finite,
+  -- we can have an inductive `List`-like definitions isomorphic to such functions.
+
+  -- This encoding is bad in a sense that it cannot adequately reuse subcircuits, but we are yet to formulate a way around it.
+
+  record Module (ins : Nat) (outs : Nat)
+
+  -- Module element is either a primitive block or a subcircuit
+  data ModuleElem = And | Or | Not | Nand | Submodule (ins : Nat ** outs : Nat ** Module ins outs)
+
+  -- Fetching number of inputs/outputs of an element
+  (.ins) : ModuleElem -> Nat
+  (.ins) And = 2
+  (.ins) Or = 2
+  (.ins) Not = 1
+  (.ins) Nand = 2
+  (.ins) (Submodule (ins ** _ ** _)) = ins
+
+  (.outs) : ModuleElem -> Nat
+  (.outs) And = 1
+  (.outs) Or = 1
+  (.outs) Not = 1
+  (.outs) Nand = 1
+  (.outs) (Submodule (_ ** outs ** _)) = outs
+
+  -- By induction on inputs, define wires connecting elements
+  data ModuleConn : (ins : Nat) -> (outs : Nat) -> Type where
+    Nil : ModuleConn 0 m
+    -- Wire connecting output `from` to input `n`
+    (::) : (from : Fin m) -> ModuleConn n m -> ModuleConn (S n) m
+
+  record Module (ins : Nat) (outs : Nat) where
+    constructor MkModule
+    elems : List ModuleElem
+    -- We add 'phantom' nodes, corresponding to inputs/outputs of the whole circuit.
+    -- Note that input of a circuit requires a phantom output node, and vice versa.
+    conn : ModuleConn (outs + foldr (+) 0 (elems <&> (.ins))) (ins + foldr (+) 0 (elems <&> (.outs)))
+
