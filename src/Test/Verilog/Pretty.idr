@@ -2,7 +2,7 @@ module Test.Verilog.Pretty
 
 import Data.Fin.Extra
 import Data.List
-import Data.Vect
+import public Data.Vect
 
 import public Test.Verilog
 
@@ -74,5 +74,6 @@ prettyModules names (NewCompositeModule m subMs conn cont) = do
 
               tuple $ line <$> outputs ++ inputs
           )
+    , line ""
     , prettyModules (name::names) cont
     ]
