@@ -46,9 +46,9 @@ namespace FinsList
   %name FinsList fs
 
   public export
-  toList : FinsList n -> List (Fin n)
-  toList []      = []
-  toList (x::xs) = x :: toList xs
+  (.asList) : FinsList n -> List (Fin n)
+  (.asList) []      = []
+  (.asList) (x::xs) = x :: xs.asList
 
 public export
 totalInputs : {ms : ModuleSigsList} -> FinsList ms.length -> Nat

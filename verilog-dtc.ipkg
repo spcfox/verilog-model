@@ -14,7 +14,8 @@ langversion >= 0.7.0
 --executable = verilog-dtc
 --main = Runner
 
-depends = deptycheck >= 0.0.240407
+depends = contrib -- for at least Data.Fin.Extra
+        , deptycheck >= 0.0.240407
         , prettier
 
 modules = Test.Verilog
