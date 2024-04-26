@@ -17,3 +17,4 @@ langversion >= 0.7.0
 depends = deptycheck >= 0.0.240407
 
 modules = Test.Verilog
+        , Test.Verilog.Gen
