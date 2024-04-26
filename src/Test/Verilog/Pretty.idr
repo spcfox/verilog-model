@@ -54,9 +54,9 @@ connFwdRel (i::cs) = i :: connFwdRel cs
 export
 prettyModules : {opts : _} -> {ms : _} -> (names : Vect ms.length String) -> Modules ms -> Doc opts
 prettyModules _ End = empty
-prettyModules names (NewCompositeModule m subMs conn cont) = do
+prettyModules names (NewCompositeModule m subMs iconn oconn cont) = do
   let name = newName names
-  let fwdRel : Vect (m.outputs + totalInputs {ms} subMs) $ Fin $ m.inputs + totalOutputs {ms} subMs := connFwdRel conn
+  let fwdRel = (indexSum . Right <$> connFwdRel oconn) ++ connFwdRel iconn
   let fwdRel : Vect (m.outputs + totalInputs {ms} subMs) String := map connName fwdRel
   vsep
     [ enclose (flush $ line "module" <++> line name) (line "endmodule:" <++> line name) $ flush $ indent 2 $ vsep $ do
