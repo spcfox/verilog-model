@@ -77,10 +77,7 @@ data Modules : ModuleSigsList -> Type where
   NewCompositeModule :
     (m : ModuleSig) ->
     (subMs : FinsList ms.length) ->
-    -- connections going to submodules
-    Connections (m.inputs + totalOutputs {ms} subMs) (totalInputs {ms} subMs) ->
-    -- connections going to outside, only from submodules
-    Connections (totalOutputs {ms} subMs) m.outputs ->
+    (conn : Connections (m.inputs + totalOutputs {ms} subMs) (m.outputs + totalInputs {ms} subMs)) ->
     (cont : Modules (m::ms)) ->
     Modules ms
 
