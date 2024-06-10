@@ -1,8 +1,12 @@
 module Test.Verilog.Pretty
 
-import Data.Fin.Extra
+import Data.Either
 import Data.List
+import Data.List1
+import Data.SortedMap
 import public Data.Vect
+
+import Deriving.DepTyCheck.Util.Collections -- I wish it was a separate library
 
 import public Test.Verilog
 
@@ -10,9 +14,20 @@ import Text.PrettyPrint.Bernardy
 
 %default total
 
-%inline
-(.length) : List a -> Nat
-(.length) = length
+reverseMapping : Ord a => Vect n a -> SortedMap a $ List1 $ Fin n
+reverseMapping = concat . mapI (\idx, x => singleton x $ singleton idx)
+
+withIndex : (xs : List a) -> List (Fin $ length xs, a)
+withIndex []      = []
+withIndex (x::xs) = (FZ, x) :: map (mapFst FS) (withIndex xs)
+
+withIndex' : (xs : Vect n a) -> Vect n (Fin n, a)
+withIndex' = mapI (,)
+
+fromMap : {n : _} -> SortedMap (Fin n) a -> Vect n (Maybe a)
+fromMap = foldl (flip . uncurry $ \i => replaceAt i . Just) (replicate _ Nothing) . SortedMap.toList
+
+-----------------------------------------------------------------------
 
 -- NOTICE: currently we are pretty printing modules deterministically.
 -- We are going to add variability to the printing in the future (say,
@@ -25,10 +40,6 @@ newName existing = assert_total go 0 where
   go n = do
     let curr = "module\{show n}"
     if isJust $ find (== curr) existing then go (S n) else curr
-
-withIndex : (xs : List a) -> List (Fin $ length xs, a)
-withIndex []      = []
-withIndex (x::xs) = (FZ, x) :: map (mapFst FS) (withIndex xs)
 
 toTotalInputsIdx : {ms : _} -> {subMs : FinsList ms.length} ->
                    (idx : Fin subMs.asList.length) ->
@@ -47,6 +58,15 @@ toTotalOutputsIdx {subMs=i::is} (FS idx) x = indexSum $ Right $ toTotalOutputsId
 connName : Fin (m.inputs + totalOutputs {ms} subMs) -> String
 connName n = "c\{show n}"
 
+outputName : Fin (m.outputs + totalInputs {ms} subMs) -> String
+outputName n = "o\{show n}"
+
+isModuleInput : {m : _} -> Fin (m.inputs + totalOutputs {ms} subMs) -> Bool
+isModuleInput = isLeft . splitSum
+
+isModuleOutput : {m : _} -> Fin (m.outputs + totalInputs {ms} subMs) -> Bool
+isModuleOutput = isLeft . splitSum
+
 connFwdRel : Connections f t -> Vect t $ Fin f
 connFwdRel []      = []
 connFwdRel (i::cs) = i :: connFwdRel cs
@@ -56,8 +76,17 @@ prettyModules : {opts : _} -> {ms : _} -> (names : Vect ms.length String) -> Mod
 prettyModules _ End = empty
 prettyModules names (NewCompositeModule m subMs conn cont) = do
   let name = newName names
-  let fwdRel : Vect (m.outputs + totalInputs {ms} subMs) $ Fin $ m.inputs + totalOutputs {ms} subMs := connFwdRel conn
-  let fwdRel : Vect (m.outputs + totalInputs {ms} subMs) String := map connName fwdRel
+  let rawFwdRel : Vect (m.outputs + totalInputs {ms} subMs) $ Fin $ m.inputs + totalOutputs {ms} subMs := connFwdRel conn
+  let backRel = reverseMapping rawFwdRel
+  let DirectAss : Type
+      DirectAss = SortedMap (Fin $ m.outputs + totalInputs {ms} subMs) (Fin $ m.inputs + totalOutputs {ms} subMs)
+  let directAssModuleIn, directAssOuts : DirectAss
+      directAssModuleIn = fromList $ mapMaybe id $ Prelude.toList $ flip mapI rawFwdRel $ \idxO, idxI =>
+                            if isModuleInput idxI && isModuleOutput idxO then Just (idxO, idxI) else Nothing
+      directAssOuts = fromList $ SortedMap.toList backRel >>= \(o, is) => tail is <&> (, o) -- we can assign both to `o`, or to `head is`
+      directAss := directAssModuleIn `mergeLeft` directAssOuts
+  let fwdRel : Vect (m.outputs + totalInputs {ms} subMs) String := rawFwdRel `zip` withIndex' (fromMap directAss) <&> \(conn, out, directIn) =>
+                 maybe (connName conn) (const $ outputName out) directIn
   vsep
     [ enclose (flush $ line "module" <++> line name) (line "endmodule:" <++> line name) $ flush $ indent 2 $ vsep $ do
         let outerModuleInputs  = List.allFins m.inputs  <&> ("input logic " ++) . connName {subMs}  . indexSum . Left
@@ -73,6 +102,8 @@ prettyModules names (NewCompositeModule m subMs conn cont) = do
               let outputs = outputs <&> connName {m}      . indexSum . Right
 
               tuple $ line <$> outputs ++ inputs
+          ) ++
+          (directAss.asList <&> \(o, i) => "assign" <++> line (outputName o) <++> "=" <++> line (connName i) <+> ";"
           )
     , line ""
     , prettyModules (name::names) cont
