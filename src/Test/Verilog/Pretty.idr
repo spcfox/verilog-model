@@ -14,21 +14,6 @@ import Text.PrettyPrint.Bernardy
 
 %default total
 
-reverseMapping : Ord a => Vect n a -> SortedMap a $ List1 $ Fin n
-reverseMapping = concat . mapI (\idx, x => singleton x $ singleton idx)
-
-withIndex : (xs : List a) -> List (Fin $ length xs, a)
-withIndex []      = []
-withIndex (x::xs) = (FZ, x) :: map (mapFst FS) (withIndex xs)
-
-withIndex' : (xs : Vect n a) -> Vect n (Fin n, a)
-withIndex' = mapI (,)
-
-fromMap : {n : _} -> SortedMap (Fin n) a -> Vect n (Maybe a)
-fromMap = foldl (flip . uncurry $ \i => replaceAt i . Just) (replicate _ Nothing) . SortedMap.toList
-
------------------------------------------------------------------------
-
 -- NOTICE: currently we are pretty printing modules deterministically.
 -- We are going to add variability to the printing in the future (say,
 -- inlining of composites and other synonimical representations of the same abstract model).
@@ -85,7 +70,7 @@ prettyModules names (NewCompositeModule m subMs conn cont) = do
                             if isModuleInput idxI && isModuleOutput idxO then Just (idxO, idxI) else Nothing
       directAssOuts = fromList $ SortedMap.toList backRel >>= \(o, is) => tail is <&> (, o) -- we can assign both to `o`, or to `head is`
       directAss := directAssModuleIn `mergeLeft` directAssOuts
-  let fwdRel : Vect (m.outputs + totalInputs {ms} subMs) String := rawFwdRel `zip` withIndex' (fromMap directAss) <&> \(conn, out, directIn) =>
+  let fwdRel : Vect (m.outputs + totalInputs {ms} subMs) String := rawFwdRel `zip` withIndex (fromMap directAss) <&> \(conn, out, directIn) =>
                  maybe (connName conn) (const $ outputName out) directIn
   vsep
     [ enclose (flush $ line "module" <++> line name) (line "endmodule:" <++> line name) $ flush $ indent 2 $ vsep $ do

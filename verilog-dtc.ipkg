@@ -14,7 +14,7 @@ langversion >= 0.7.0
 executable = verilog-dtc
 main = Runner
 
-depends = deptycheck >= 0.0.240407
+depends = deptycheck >= 0.0.240409
         , prettier
 
 modules = Test.Verilog
