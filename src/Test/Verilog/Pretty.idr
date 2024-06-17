@@ -2,15 +2,19 @@ module Test.Verilog.Pretty
 
 import Data.Either
 import Data.List
+import Data.List.Extra
 import Data.List1
+import Data.Fin.Split
 import Data.SortedMap
 import public Data.Vect
-
-import Deriving.DepTyCheck.Util.Collections -- I wish it was a separate library
+import Data.Vect.Extra
 
 import public Test.Verilog
 
 import Text.PrettyPrint.Bernardy
+
+import Syntax.IHateParens.List
+import Syntax.IHateParens.SortedMap
 
 %default total
 
