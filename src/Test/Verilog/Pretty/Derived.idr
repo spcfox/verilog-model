@@ -9,6 +9,4 @@ import System.Random.Pure.StdGen
 
 %logging "deptycheck.derive" 5
 
-%hint LE : ConstructorDerivator; LE = LeastEffort {simplificationHack = True}
-
 Test.Verilog.Pretty.rawNewName = deriveGen
