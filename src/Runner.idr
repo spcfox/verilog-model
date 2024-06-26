@@ -33,30 +33,12 @@ StdModulesNames =
   , "not"
   ]
 
-StdModuleNamesS : SVect StdModules .length
-StdModuleNamesS =
-  [ "and"
-  , "or"
-  , "nand"
-  , "xor"
-  , "not"
-  ]
-
 PrettyOpts : LayoutOpts
 PrettyOpts = Opts 152
 
--- namesGen : Gen0 String
--- namesGen = pack <$> listOf {length = choose (1,10)} (choose ('a', 'z'))
-
--- namesGen' : Fuel -> Gen MaybeEmpty String
--- namesGen' _ = namesGen
-
 main : IO ()
 main = do
-  -- let deb = unGenTryN 1 someStdGen $ rawNewName (limit 10) @{namesGen'} 3 ["a", "b", "c"] testUniq
-  -- Lazy.for_ deb $ \(s ** _) => do
-  --   putStrLn s
-  let vals = unGenTryN 10 someStdGen $ genModules (limit 4) StdModules >>= mypprint (limit 10) StdModuleNamesS %search
+  let vals = unGenTryN 10 someStdGen $ genModules (limit 4) StdModules >>= prettyModules (limit 10) (fromVect StdModulesNames)
   Lazy.for_ vals $ \val => do
     putStrLn "-------------------\n"
     putStr $ render PrettyOpts $ val
