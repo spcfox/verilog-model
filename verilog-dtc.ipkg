@@ -22,3 +22,4 @@ depends = collection-utils
 modules = Test.Verilog
         , Test.Verilog.Gen
         , Test.Verilog.Pretty
+        , Test.Verilog.Pretty.Derived
