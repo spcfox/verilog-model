@@ -50,6 +50,11 @@ namespace FinsList
   (.asList) []      = []
   (.asList) (x::xs) = x :: xs.asList
 
+  public export
+  (.length) : FinsList n -> Nat
+  (.length) [] = 0
+  (.length) (x::xs) = S xs.length
+
 public export
 totalInputs : {ms : ModuleSigsList} -> FinsList ms.length -> Nat
 totalInputs []      = 0
