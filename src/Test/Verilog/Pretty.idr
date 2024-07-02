@@ -72,7 +72,16 @@ data SVect : (len : Nat) -> Type where
 
 (.length) : SVect l -> Nat
 (.length) [] = Z
-(.length) (x :: xs) = S (xs .length)
+(.length) (x :: xs) = S xs.length
+
+toVect : SVect l -> Vect l String
+toVect [] = []
+toVect (x :: xs) = x :: toVect xs
+
+public export
+fromVect : Vect l String -> SVect l
+fromVect [] = []
+fromVect (x :: xs) = x :: fromVect xs
 
 public export
 data UniqNames : (l : Nat) -> SVect l -> Type
@@ -102,128 +111,109 @@ namesGen = pack <$> listOf {length = choose (1,10)} (choose ('a', 'z'))
 namesGen' : Fuel -> Gen MaybeEmpty String
 namesGen' _ = namesGen
 
-genPlusOneName : {l : Nat} -> Fuel -> (names: SVect l) -> (un: UniqNames l names) -> Gen MaybeEmpty (out : String ** UniqNames (S l) (out :: names))
-genPlusOneName x names un = do 
+genOneUniqueName :  {l : Nat} -> Fuel -> (names: SVect l) -> (un: UniqNames l names) -> 
+                    Gen MaybeEmpty (out : String ** UniqNames (S l) (out :: names))
+genOneUniqueName x names un = do 
   (name ** uname) <- rawNewName x @{namesGen'} l names un
   pure (name ** Cons names name un uname)
 
-genNExtraNames : {l : Nat} -> Fuel -> (n : Nat) -> (names: SVect l) -> (un: UniqNames l names) -> 
-  Gen MaybeEmpty (newNames : SVect (n + l) ** UniqNames (n + l) newNames)
-genNExtraNames _ Z names un = pure (names ** un)
-genNExtraNames x (S k) names un = do
-  (tail ** utail) <- genNExtraNames x k names un
-  (head ** uhead) <- genPlusOneName x tail utail
+genNUniqueNames : {l : Nat} -> Fuel -> (n : Nat) -> (names: SVect l) -> (un: UniqNames l names) -> 
+                  Gen MaybeEmpty (newNames : SVect (n + l) ** UniqNames (n + l) newNames)
+genNUniqueNames _ Z names un = pure (names ** un)
+genNUniqueNames x (S k) names un = do
+  (tail ** utail) <- genNUniqueNames x k names un
+  (head ** uhead) <- genOneUniqueName x tail utail
   pure (head :: tail ** uhead)
 
-toVect : SVect l -> Vect l String
-toVect [] = []
-toVect (x :: xs) = x :: toVect xs
-
-public export
-fromVect : Vect l String -> SVect l
-fromVect [] = []
-fromVect (x :: xs) = x :: fromVect xs
-
-invertConn' : Vect l (Fin outs, Fin ins) -> Vect ins (List (Fin outs)) -> Vect ins (List (Fin outs))
-invertConn' [] ys = ys
-invertConn' ((outIdx, inIdx):: xs) ys = invertConn' xs $ updateAt inIdx (outIdx ::) ys
-
 invertConn : {ins: Nat} -> Vect outs (Fin ins) -> Vect ins (List (Fin outs))
-invertConn xs = invertConn' (withIndex xs) (replicate ins [])
+invertConn = foldl registerDriven (replicate ins []) . withIndex
+  where
+    registerDriven : Vect ins (List (Fin outs)) -> (Fin outs, Fin ins) -> Vect ins (List (Fin outs))
+    registerDriven ys (outIdx, inIdx) = updateAt inIdx (outIdx ::) ys
 
-pf : LTE (S x) y -> LTE x y
-pf (LTESucc LTEZero) = LTEZero
-pf (LTESucc (LTESucc z)) = LTESucc $ pf $ LTESucc z
-
-getFirstTopLevel : {realOutputs: Nat} -> List (Fin (plus realOutputs subMInputs)) -> Maybe (Fin realOutputs)
+getFirstTopLevel : {topLevelOutputs: Nat} -> List (Fin (topLevelOutputs + subMInputs)) -> Maybe (Fin topLevelOutputs)
 getFirstTopLevel [] = Nothing
-getFirstTopLevel (x :: xs) = case isLT (finToNat x) realOutputs of
-  Yes a => Just $ natToFinLT (finToNat x)
+getFirstTopLevel (x :: xs) = case isLT (finToNat x) topLevelOutputs of
+  Yes a => Just $ natToFinLT $ finToNat x
   No b => getFirstTopLevel xs
 
-findNoTopLevel : {realOutputs: Nat} -> Vect l (Fin (plus realInputs subMOutputs), List (Fin (plus realOutputs subMInputs))) 
-                                    -> List (Fin (plus realInputs subMOutputs))
-findNoTopLevel xs = (foldl (\acc, (i,r) => case getFirstTopLevel r of
-  Just n => acc
-  Nothing => i :: acc) [] xs)
+-- Finds all inputs that drive no toplevel outputs
+findInternalInputs :  {topLevelOutputs: Nat} -> 
+                      Vect l (Fin ins, List (Fin (topLevelOutputs + subMInputs))) -> 
+                      List (Fin ins)
+findInternalInputs = map fst . filter (isNothing . getFirstTopLevel . snd) . toList
 
-genInternalLookupTable : (internals : List (Fin l)) -> (names: Vect (internals.length) String) -> SortedMap (Fin l) String
-genInternalLookupTable [] [] = empty
-genInternalLookupTable (x :: xs) (y :: ys) = insert x y $ genInternalLookupTable xs ys
+computeInternalsLookupTable : (internals : List (Fin l)) -> (names: Vect (internals.length) String) -> SortedMap (Fin l) String
+computeInternalsLookupTable [] [] = empty
+computeInternalsLookupTable (x :: xs) (y :: ys) = insert x y $ computeInternalsLookupTable xs ys
 
-genInputNames' : {realInputs: Nat} -> {realOutputs: Nat} -> Vect realOutputs String 
-                                                         -> SortedMap (Fin (plus realInputs subMOutputs)) String 
-                                                         -> Vect l (Fin (plus realInputs subMOutputs), 
-                                                                   List (Fin (plus realOutputs subMInputs))) 
-                                                         -> Vect l String
-genInputNames' oNames lut [] = []
-genInputNames' oNames lut ((i, v) :: xs) = (case getFirstTopLevel v of
-  Just x => index x oNames
-  Nothing => case lookup i lut of
-    Just x => x
-    Nothing => "<error>") :: genInputNames' oNames lut xs
+solveInputNames : {topLevelInputs: Nat} -> {topLevelOutputs: Nat} -> Vect topLevelInputs String -> Vect topLevelOutputs String -> 
+                  SortedMap (Fin (topLevelInputs + subMOutputs)) String -> 
+                  Vect (topLevelInputs + subMOutputs) (Fin (topLevelInputs + subMOutputs), List (Fin (topLevelOutputs + subMInputs))) -> 
+                  Vect (topLevelInputs + subMOutputs) String
+solveInputNames iNames oNames lut = (iNames ++) . map solveName . drop topLevelInputs
+  where
+    solveName : (Fin (topLevelInputs + subMOutputs), List (Fin (topLevelOutputs + subMInputs))) -> String
+    solveName (i, v) = fromMaybe "<error>" $ lookup i lut <|> flip index oNames <$> getFirstTopLevel v
 
-genInputNames : {realInputs: Nat} -> {realOutputs: Nat} -> Vect realInputs String -> Vect realOutputs String 
-                                                        -> SortedMap (Fin (plus realInputs subMOutputs)) String 
-                                                        -> Vect (plus realInputs subMOutputs) 
-                                                                (Fin (plus realInputs subMOutputs), List (Fin (plus realOutputs subMInputs))) 
-                                                        -> Vect (plus realInputs subMOutputs) String
-genInputNames iNames oNames lut xs = do
-  let (first, second) = splitAt realInputs xs
-  iNames ++ genInputNames' oNames lut second
+solveOutputNames :  {topLevelOutputs: Nat} -> Vect ins String -> Vect topLevelOutputs String -> 
+                    Vect (topLevelOutputs + subMInputs) (Fin ins) -> 
+                    Vect (topLevelOutputs + subMInputs) String
+solveOutputNames iNames oNames = (oNames ++) . map (flip index iNames) . drop topLevelOutputs
 
-genOutputNames' : Vect inputs String -> Vect l (Fin inputs) -> Vect l String
-genOutputNames' inputNames [] = []
-genOutputNames' inputNames (x :: xs) = index x inputNames :: genOutputNames' inputNames xs
-
-genOutputNames : {realOutputs: Nat} -> Vect inputs String -> Vect realOutputs String 
-                                    -> Vect (plus realOutputs subMInputs) (Fin inputs) 
-                                    -> Vect (plus realOutputs subMInputs) String
-genOutputNames iNames oNames xs = do
-  let (first, second) = splitAt realOutputs xs
-  oNames ++ genOutputNames' iNames second
-
-
-genAssigns' : {realOutputs: Nat} -> Vect inputs String -> Vect realOutputs String 
-                                 -> Vect l (Fin realOutputs, Fin inputs) -> List (Fin realOutputs, Fin inputs) 
-genAssigns' iNames oNames xs = filter (\(outId, inId) => (index outId oNames) /= (index inId iNames)) (toList xs)
-
-genAssigns :  {realOutputs: Nat} -> Vect inputs String -> Vect realOutputs String 
-                                 -> Vect (plus realOutputs subMInputs) (Fin inputs) -> List (Fin realOutputs, Fin inputs)
-genAssigns iNames oNames xs = do
-  let (first, second) = splitAt realOutputs xs
-  genAssigns' iNames oNames $ withIndex first
+solveAssigns :  {topLevelOutputs: Nat} -> Vect ins String -> Vect topLevelOutputs String -> 
+                Vect (topLevelOutputs + subMInputs) (Fin ins) -> List (Fin topLevelOutputs, Fin ins)
+solveAssigns iNames oNames = filter namesNotIdentical . toList . withIndex . take topLevelOutputs
+  where
+    namesNotIdentical : (Fin topLevelOutputs, Fin ins) -> Bool
+    namesNotIdentical (outId, inId) = index outId oNames /= index inId iNames
 
 export
 prettyModules : {opts : _} -> {ms : _} -> Fuel -> (names : SVect ms.length) -> UniqNames ms.length names => Modules ms -> Gen0 $ Doc opts
 prettyModules x _ End = pure empty
 prettyModules x names @{un} (NewCompositeModule m subMs conn cont) = do
+  -- Generate submodule name
   (name ** isnew) <- rawNewName x @{namesGen'} ms.length names un
-  recur <- prettyModules x (name::names) cont
-  (namesWithInput ** uni) <- genNExtraNames x m.inputs names un
+  -- Generate toplevel input names
+  (namesWithInput ** uni) <- genNUniqueNames x m.inputs names un
   let inputNames = take m.inputs $ toVect namesWithInput
-  (namesWithIO ** unio) <- genNExtraNames x m.outputs namesWithInput uni
+  -- Generate toplevel output names
+  (namesWithIO ** unio) <- genNUniqueNames x m.outputs namesWithInput uni
   let outputNames = take m.outputs $ toVect namesWithIO
-  (namesIOWithSubMs ** uniosub) <- genNExtraNames x subMs.length namesWithIO unio
+  -- Generate submodule instance names
+  (namesIOWithSubMs ** uniosub) <- genNUniqueNames x subMs.length namesWithIO unio
   let subMInstanceNames = take subMs.length $ toVect namesIOWithSubMs
-  let outerModuleInputs = map ("input logic " ++) inputNames
-  let outerModuleOutputs = map ("output logic " ++) outputNames 
-  let outerModuleIO = toList $ line <$> (outerModuleOutputs ++ outerModuleInputs)
-  let outputToDriver = connFwdRel $ conn
-  let inputToDriven : Vect (plus (m .inputs) (totalOutputs subMs)) (List (Fin (plus (m .outputs) (totalInputs subMs)))) = invertConn outputToDriver
-  let noTLDrivenInputs = findNoTopLevel $ withIndex inputToDriven
-  (namesWithInternal ** unint) <- genNExtraNames x noTLDrivenInputs.length namesIOWithSubMs uniosub
-  let internalNames = take noTLDrivenInputs.length $ toVect namesWithInternal
-  let internalLUT = genInternalLookupTable noTLDrivenInputs internalNames
-  let fullInputNames : Vect (plus (m .inputs) (totalOutputs subMs)) String 
-                      = genInputNames inputNames outputNames internalLUT $ withIndex inputToDriven
-  let (_, subMONames) = splitAt (m .inputs) fullInputNames
-  let fullOutputNames : Vect (plus (m .outputs) (totalInputs subMs)) String 
-                      = genOutputNames fullInputNames outputNames outputToDriver
-  let (_, subMINames) = splitAt (m .outputs) fullOutputNames
-  let assigns = genAssigns fullInputNames outputNames outputToDriver
+  
+  -- Extract a output to driving input mapping from conn
+  let outputToDriver = connFwdRel conn
+  -- Invert it into a input to driven outputs mapping
+  let inputToDriven : Vect (m.inputs + totalOutputs subMs) $ List $ Fin $ m.outputs + totalInputs subMs
+                    = invertConn outputToDriver
+
+  -- Generate names for internal inputs (inputs that drive no toplevel outputs)
+  let internalInputs = findInternalInputs $ withIndex inputToDriven
+  (namesWithInternal ** unint) <- genNUniqueNames x internalInputs.length namesIOWithSubMs uniosub
+  let internalInputNames = take internalInputs.length $ toVect namesWithInternal
+
+  -- Create a full list of input names
+  let internalLUT = computeInternalsLookupTable internalInputs internalInputNames
+  let fullInputNames  : Vect (m.inputs + totalOutputs subMs) String 
+                      = solveInputNames inputNames outputNames internalLUT $ withIndex inputToDriven
+  let subMONames = drop m.inputs fullInputNames
+  -- Create a full list of output names
+  let fullOutputNames : Vect (m.outputs + totalInputs subMs) String 
+                      = solveOutputNames fullInputNames outputNames outputToDriver
+  let subMINames = drop m.outputs fullOutputNames
+  -- Compute necessary assign statements
+  let assigns = solveAssigns fullInputNames outputNames outputToDriver
+
+  -- Recursive call to use at the end
+  recur <- prettyModules x (name::names) cont
   pure $ vsep
-    [ enclose (flush $ line "module" <++> line name) (line "endmodule:" <++> line name) $ flush $ indent 2 $ vsep $ 
+    [ enclose (flush $ line "module" <++> line name) (line "endmodule:" <++> line name) $ flush $ indent 2 $ vsep $ do
+      let outerModuleInputs = map ("input logic " ++) inputNames
+      let outerModuleOutputs = map ("output logic " ++) outputNames 
+      let outerModuleIO = toList $ line <$> (outerModuleOutputs ++ outerModuleInputs)
       [ tuple outerModuleIO <+> symbol ';' , line "" ] ++
         (zip (toList subMInstanceNames) (withIndex subMs.asList) <&> \(instanceName, subMsIdx, msIdx) =>
           line (index msIdx $ toVect names) <++> line instanceName <+> do
@@ -233,7 +223,7 @@ prettyModules x names @{un} (NewCompositeModule m subMs conn cont) = do
             let inputs  = inputs  <&> flip index subMINames
             let outputs = outputs <&> flip index subMONames
 
-            tuple $ line <$> outputs ++ inputs
+            (tuple $ line <$> outputs ++ inputs) <+> symbol ';'
         ) ++ [line ""] ++ (assigns <&> \(outIdx, inIdx) =>
           line "assign" <++> line (index outIdx outputNames) <++> symbol '=' <++> line (index inIdx fullInputNames) <+> symbol ';'
         )
