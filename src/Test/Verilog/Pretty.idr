@@ -24,10 +24,6 @@ import Syntax.IHateParens.SortedMap
 
 %default total
 
--- NOTICE: currently we are pretty printing modules deterministically.
--- We are going to add variability to the printing in the future (say,
--- inlining of composites and other synonimical representations of the same abstract model).
-
 toTotalInputsIdx : {ms : _} -> {subMs : FinsList ms.length} ->
                    (idx : Fin subMs.asList.length) ->
                    Fin (index ms (index' subMs.asList idx)).inputs ->
@@ -111,13 +107,13 @@ namesGen = pack <$> listOf {length = choose (1,10)} (choose ('a', 'z'))
 namesGen' : Fuel -> Gen MaybeEmpty String
 namesGen' _ = namesGen
 
-genOneUniqueName :  {l : Nat} -> Fuel -> (names: SVect l) -> (un: UniqNames l names) -> 
-                    Gen MaybeEmpty (out : String ** UniqNames (S l) (out :: names))
-genOneUniqueName x names un = do 
+genOneUniqueName : {l : Nat} -> Fuel -> (names: SVect l) -> (un: UniqNames l names) ->
+                   Gen MaybeEmpty (out : String ** UniqNames (S l) (out :: names))
+genOneUniqueName x names un = do
   (name ** uname) <- rawNewName x @{namesGen'} l names un
   pure (name ** Cons names name un uname)
 
-genNUniqueNames : {l : Nat} -> Fuel -> (n : Nat) -> (names: SVect l) -> (un: UniqNames l names) -> 
+genNUniqueNames : {l : Nat} -> Fuel -> (n : Nat) -> (names: SVect l) -> (un: UniqNames l names) ->
                   Gen MaybeEmpty (newNames : SVect (n + l) ** UniqNames (n + l) newNames)
 genNUniqueNames _ Z names un = pure (names ** un)
 genNUniqueNames x (S k) names un = do
@@ -138,8 +134,8 @@ getFirstTopLevel (x :: xs) = case isLT (finToNat x) topLevelOutputs of
   No b => getFirstTopLevel xs
 
 -- Finds all inputs that drive no toplevel outputs
-findInternalInputs :  {topLevelOutputs: Nat} -> 
-                      Vect l (Fin ins, List (Fin (topLevelOutputs + subMInputs))) -> 
+findInternalInputs :  {topLevelOutputs: Nat} ->
+                      Vect l (Fin ins, List (Fin (topLevelOutputs + subMInputs))) ->
                       List (Fin ins)
 findInternalInputs = map fst . filter (isNothing . getFirstTopLevel . snd) . toList
 
@@ -147,21 +143,21 @@ computeInternalsLookupTable : (internals : List (Fin l)) -> (names: Vect (intern
 computeInternalsLookupTable [] [] = empty
 computeInternalsLookupTable (x :: xs) (y :: ys) = insert x y $ computeInternalsLookupTable xs ys
 
-solveInputNames : {topLevelInputs: Nat} -> {topLevelOutputs: Nat} -> Vect topLevelInputs String -> Vect topLevelOutputs String -> 
-                  SortedMap (Fin (topLevelInputs + subMOutputs)) String -> 
-                  Vect (topLevelInputs + subMOutputs) (Fin (topLevelInputs + subMOutputs), List (Fin (topLevelOutputs + subMInputs))) -> 
+solveInputNames : {topLevelInputs: Nat} -> {topLevelOutputs: Nat} -> Vect topLevelInputs String -> Vect topLevelOutputs String ->
+                  SortedMap (Fin (topLevelInputs + subMOutputs)) String ->
+                  Vect (topLevelInputs + subMOutputs) (Fin (topLevelInputs + subMOutputs), List (Fin (topLevelOutputs + subMInputs))) ->
                   Vect (topLevelInputs + subMOutputs) String
 solveInputNames iNames oNames lut = (iNames ++) . map solveName . drop topLevelInputs
   where
     solveName : (Fin (topLevelInputs + subMOutputs), List (Fin (topLevelOutputs + subMInputs))) -> String
     solveName (i, v) = fromMaybe "<error>" $ lookup i lut <|> flip index oNames <$> getFirstTopLevel v
 
-solveOutputNames :  {topLevelOutputs: Nat} -> Vect ins String -> Vect topLevelOutputs String -> 
-                    Vect (topLevelOutputs + subMInputs) (Fin ins) -> 
+solveOutputNames :  {topLevelOutputs: Nat} -> Vect ins String -> Vect topLevelOutputs String ->
+                    Vect (topLevelOutputs + subMInputs) (Fin ins) ->
                     Vect (topLevelOutputs + subMInputs) String
 solveOutputNames iNames oNames = (oNames ++) . map (flip index iNames) . drop topLevelOutputs
 
-solveAssigns :  {topLevelOutputs: Nat} -> Vect ins String -> Vect topLevelOutputs String -> 
+solveAssigns :  {topLevelOutputs: Nat} -> Vect ins String -> Vect topLevelOutputs String ->
                 Vect (topLevelOutputs + subMInputs) (Fin ins) -> List (Fin topLevelOutputs, Fin ins)
 solveAssigns iNames oNames = filter namesNotIdentical . toList . withIndex . take topLevelOutputs
   where
@@ -183,7 +179,7 @@ prettyModules x names @{un} (NewCompositeModule m subMs conn cont) = do
   -- Generate submodule instance names
   (namesIOWithSubMs ** uniosub) <- genNUniqueNames x subMs.length namesWithIO unio
   let subMInstanceNames = take subMs.length $ toVect namesIOWithSubMs
-  
+
   -- Extract a output to driving input mapping from conn
   let outputToDriver = connFwdRel conn
   -- Invert it into a input to driven outputs mapping
@@ -197,11 +193,11 @@ prettyModules x names @{un} (NewCompositeModule m subMs conn cont) = do
 
   -- Create a full list of input names
   let internalLUT = computeInternalsLookupTable internalInputs internalInputNames
-  let fullInputNames  : Vect (m.inputs + totalOutputs subMs) String 
-                      = solveInputNames inputNames outputNames internalLUT $ withIndex inputToDriven
+  let fullInputNames : Vect (m.inputs + totalOutputs subMs) String
+                     = solveInputNames inputNames outputNames internalLUT $ withIndex inputToDriven
   let subMONames = drop m.inputs fullInputNames
   -- Create a full list of output names
-  let fullOutputNames : Vect (m.outputs + totalInputs subMs) String 
+  let fullOutputNames : Vect (m.outputs + totalInputs subMs) String
                       = solveOutputNames fullInputNames outputNames outputToDriver
   let subMINames = drop m.outputs fullOutputNames
   -- Compute necessary assign statements
@@ -212,7 +208,7 @@ prettyModules x names @{un} (NewCompositeModule m subMs conn cont) = do
   pure $ vsep
     [ enclose (flush $ line "module" <++> line name) (line "endmodule:" <++> line name) $ flush $ indent 2 $ vsep $ do
       let outerModuleInputs = map ("input logic " ++) inputNames
-      let outerModuleOutputs = map ("output logic " ++) outputNames 
+      let outerModuleOutputs = map ("output logic " ++) outputNames
       let outerModuleIO = toList $ line <$> (outerModuleOutputs ++ outerModuleInputs)
       [ tuple outerModuleIO <+> symbol ';' , line "" ] ++
         (zip (toList subMInstanceNames) (withIndex subMs.asList) <&> \(instanceName, subMsIdx, msIdx) =>
