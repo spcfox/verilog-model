@@ -111,6 +111,16 @@ tail'' : List a -> List a
 tail'' []        = []
 tail'' xs@(_::_) = tail xs
 
+covering
+mapMaybe : (a -> Maybe b) -> Stream a -> Stream b
+mapMaybe f (x::xs) = case f x of
+  Just y  => y :: mapMaybe f xs
+  Nothing => mapMaybe f xs
+
+nonTrivial : String -> Bool
+nonTrivial = any (/= "") . map trim . lines
+
+covering
 main : IO ()
 main = do
   let usage : Lazy String := usageInfo "\nUsage:" cliOpts
@@ -121,7 +131,11 @@ main = do
   let cfg : Config Maybe = foldl (mergeCfg (\x, y => x <|> y)) allNothing options
   let cfg : Config Prelude.id = mergeCfg (\m, d => fromMaybe d m) cfg !defaultConfig
 
-  let vals = unGenTryN cfg.testsCnt cfg.randomSeed $ genModules cfg.modelFuel StdModules >>= prettyModules (limit 1000) (fromVect StdModulesNames)
+  let vals = unGenTryAll' cfg.randomSeed $
+               genModules cfg.modelFuel StdModules >>= map (render cfg.layoutOpts) . prettyModules (limit 1000) (fromVect StdModulesNames)
+  let vals = flip mapMaybe vals $ \gmd => snd gmd >>= \md : String => if nonTrivial md then Just (fst gmd, md) else Nothing
+  let vals = vals <&> \(g, d) => d ++ "// seed after: \{show g}\n"
+  let vals = take (limit cfg.testsCnt) vals
   Lazy.for_ vals $ \val => do
     putStrLn "-------------------\n"
-    putStr $ render cfg.layoutOpts $ val
+    putStr val
