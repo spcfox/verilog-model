@@ -16,6 +16,7 @@ main = Runner
 
 depends = collection-utils
         , deptycheck >= 0.0.240409
+        , getopts
         , i-hate-parens
         , prettier
 
