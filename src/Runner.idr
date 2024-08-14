@@ -131,6 +131,7 @@ main = do
   let cfg : Config Maybe = foldl (mergeCfg (\x, y => x <|> y)) allNothing options
   let cfg : Config Prelude.id = mergeCfg (\m, d => fromMaybe d m) cfg !defaultConfig
 
+  putStrLn "// initial seed: \{show cfg.randomSeed}"
   let vals = unGenTryAll' cfg.randomSeed $
                genModules cfg.modelFuel StdModules >>= map (render cfg.layoutOpts) . prettyModules (limit 1000) (fromVect StdModulesNames)
   let vals = flip mapMaybe vals $ \gmd => snd gmd >>= \md : String => if nonTrivial md then Just (fst gmd, md) else Nothing
