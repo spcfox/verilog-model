@@ -2,6 +2,7 @@ module Runner
 
 import Data.Fuel
 import Data.List.Lazy
+import Data.List.Lazy.Extra
 import Data.List1
 import Data.String
 
@@ -17,6 +18,7 @@ import Text.PrettyPrint.Bernardy
 import System
 import System.GetOpts
 import System.Random.Pure.StdGen
+import System.Directory
 
 %default total
 
@@ -45,6 +47,7 @@ record Config m where
   layoutOpts : m LayoutOpts
   testsCnt   : m Nat
   modelFuel  : m Fuel
+  testsDir   : m (Maybe String)
 
 allNothing : Config Maybe
 allNothing = MkConfig
@@ -52,6 +55,7 @@ allNothing = MkConfig
   , layoutOpts = Nothing
   , testsCnt   = Nothing
   , modelFuel  = Nothing
+  , testsDir   = Nothing
   }
 
 defaultConfig : IO $ Config Prelude.id
@@ -60,11 +64,12 @@ defaultConfig = pure $ MkConfig
   , layoutOpts = Opts 152
   , testsCnt   = 10
   , modelFuel  = limit 4
+  , testsDir   = Nothing
   }
 
 -- TODO to do this with `barbies`
 mergeCfg : (forall a. m a -> n a -> k a) -> Config m -> Config n -> Config k
-mergeCfg f (MkConfig rs lo tc mf) (MkConfig rs' lo' tc' mf') = MkConfig (f rs rs') (f lo lo') (f tc tc') (f mf mf')
+mergeCfg f (MkConfig rs lo tc mf td) (MkConfig rs' lo' tc' mf' td') = MkConfig (f rs rs') (f lo lo') (f tc tc') (f mf mf') (f td td')
 
 parseSeed : String -> Either String $ Config Maybe
 parseSeed str = do
@@ -93,6 +98,9 @@ parseModelFuel str = case parsePositive str of
   Just n  => Right $ {modelFuel := Just $ limit n} allNothing
   Nothing => Left "can't parse given model fuel"
 
+parseTestsDir : String -> Either String $ Config Maybe
+parseTestsDir str = Right $ {testsDir := Just $ Just str} allNothing
+
 cliOpts : List $ OptDescr $ Config Maybe
 cliOpts =
   [ MkOpt [] ["seed"]
@@ -107,6 +115,9 @@ cliOpts =
   , MkOpt [] ["model-fuel"]
       (ReqArg' parseModelFuel "<fuel>")
       "Sets how much fuel there is for generation of the model."
+  , MkOpt ['o'] ["to", "generate-to"]
+      (ReqArg' parseTestsDir "<target-dir>")
+      "Sets where to generate the tests."
   ]
 
 tail'' : List a -> List a
@@ -121,6 +132,19 @@ mapMaybe f (x::xs) = case f x of
 
 nonTrivial : String -> Bool
 nonTrivial = any (/= "") . map trim . lines
+
+countDigit : Nat -> Nat
+countDigit 0 = 0
+countDigit n = 1 + countDigit(assert_smaller n $ divNatNZ n 10 %search)
+
+createDir' : String -> IO (Either FileError ())
+createDir' = foldlM createDirHelper (Right ()) . inits . toList . split (=='/') where
+  createDirHelper : Either FileError () -> List String -> IO (Either FileError ())
+  createDirHelper _           []       = pure $ Right ()
+  createDirHelper (Left  err) _        = pure $ Left err
+  createDirHelper (Right _  ) subpaths = createDir (joinBy "/" subpaths) <&> \case
+    Left FileExists => Right ()
+    e               => e
 
 covering
 main : IO ()
@@ -137,8 +161,25 @@ main = do
   let vals = unGenTryAll' cfg.randomSeed $
                genModules cfg.modelFuel StdModules >>= map (render cfg.layoutOpts) . prettyModules (limit 1000) StdModulesPV
   let vals = flip mapMaybe vals $ \gmd => snd gmd >>= \md : String => if nonTrivial md then Just (fst gmd, md) else Nothing
-  let vals = vals <&> \(g, d) => d ++ "// seed after: \{show g}\n"
   let vals = take (limit cfg.testsCnt) vals
-  Lazy.for_ vals $ \val => do
-    putStrLn "-------------------\n"
-    putStr val
+
+  case cfg.testsDir of
+    Nothing => do
+      Lazy.for_ vals $ \(seed, generatedModule) => do
+      putStrLn "-------------------\n"
+      putStr $ generatedModule ++ "// seed after: \{show seed}\n"
+    Just path => do
+      Right () <- createDir' path | Left err => die "Couldn't create dirs due to an error: \{show err}"
+      -- set file name paddings
+      let padding = countDigit cfg.testsCnt
+      let (seeds, modules) = unzip vals
+      let alignedSeeds = cfg.randomSeed::seeds
+      let numberedVals = withIndex $ zip modules alignedSeeds
+      -- print files
+      Lazy.for_ numberedVals $ \(idx, (generatedModule, seed)) => do
+        let fileName = "\{path}/\{padLeft padding '0' (show idx)}-\{show seed}.sv"
+        writeRes <- writeFile fileName generatedModule
+        case writeRes of
+          Left err => putStrLn (show err)
+          Right () => putStrLn "[+] Printed file \{fileName}"
+        pure ()
