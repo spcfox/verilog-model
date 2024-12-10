@@ -1,19 +1,78 @@
 module Test.Verilog
 
 import Data.Fuel
+import Data.Vect
 import public Data.Fin
 
 import Test.DepTyCheck.Gen
 
 %default total
 
+namespace SVTypes
+
+  ||| Variable types
+  |||
+  ||| |  Type     | Description                                                     |
+  ||| |-----------|-----------------------------------------------------------------|
+  ||| | shortint  | 2-state data type, 16-bit signed integer                        |
+  ||| | int       | 2-state data type, 32-bit signed integer                        |
+  ||| | longint   | 2-state data type, 64-bit signed integer                        |
+  ||| | byte      | 2-state data type, 8-bit signed integer or ASCII character      |
+  ||| | bit       | 2-state data type, user-defined vector size, unsigned           |
+  ||| | logic     | 4-state data type, user-defined vector size, unsigned           |
+  ||| | reg       | 4-state data type, user-defined vector size, unsigned           |
+  ||| | integer   | 4-state data type, 32-bit signed integer                        |
+  ||| | time      | 4-state data type, 64-bit unsigned integer                      |
+  ||| | real      | The “real” data type is 64-bit                                  |
+  ||| | shortreal | The “shortreal” data type is 32-bit                             |
+  ||| | realtime  | The “realtime” declarations is treated synonymously with “real” |
+  |||
+  ||| Net types
+  |||
+  ||| | Net     | Description                                             |
+  ||| |---------|---------------------------------------------------------|
+  ||| | wire    | A high impedance net; multi-driver net                  |
+  ||| | tri     | A high impedance net; multi-driver net                  |
+  ||| | tri0    | Resistive pulldown net                                  |
+  ||| | tri1    | Resistive pullup net                                    |
+  ||| | trior   | Same as “wor”; “1” wins in all cases; multi-driver net  |
+  ||| | triand  | Same as “wand”; “0” wins in all cases; multi-driver net |
+  ||| | trireg  | Models charge storage node                              |
+  ||| | uwire   | Unresolved type; allows only one driver on the net      |
+  ||| | wand    | Same as “triand”; “0” wins in all cases                 |
+  ||| | wor     | Same as trior; “1” wins in all cases                    |
+  ||| | supply0 | Net with supply strength to model “gnd”                 |
+  ||| | supply1 | Net with supply strength to model “power”               |
+  public export
+  data SVType = Logic' | Wire' | Uwire' | Int' | Integer' | Bit' | Real'
+
+  public export
+  data ConnectionsList = Nil | (::) SVType ConnectionsList
+
+  public export
+  length : ConnectionsList -> Nat
+  length []      = Z
+  length (_::ms) = S $ length ms
+
+  public export %inline
+  (.length) : ConnectionsList -> Nat
+  (.length) = length
+
 namespace ModuleSig
 
   public export
   record ModuleSig where
     constructor MkModuleSig
-    inputs  : Nat
-    outputs : Nat
+    inputs  : ConnectionsList
+    outputs : ConnectionsList
+
+  public export
+  (.inpsCount) : ModuleSig -> Nat
+  (.inpsCount) m = length m.inputs
+
+  public export
+  (.outsCount) : ModuleSig -> Nat
+  (.outsCount) m = length m.outputs
 
   %name ModuleSig m
 
@@ -58,12 +117,12 @@ namespace FinsList
 public export
 totalInputs : {ms : ModuleSigsList} -> FinsList ms.length -> Nat
 totalInputs []      = 0
-totalInputs (i::is) = (index ms i).inputs + totalInputs is
+totalInputs (i::is) = (index ms i).inpsCount + totalInputs is
 
 public export
 totalOutputs : {ms : ModuleSigsList} -> FinsList ms.length -> Nat
 totalOutputs []      = 0
-totalOutputs (i::is) = (index ms i).outputs + totalOutputs is
+totalOutputs (i::is) = (index ms i).outsCount + totalOutputs is
 
 -- equivalent of `Vect outs (Fin ins)`
 -- Each output has a connection from some single input.
@@ -82,7 +141,7 @@ data Modules : ModuleSigsList -> Type where
   NewCompositeModule :
     (m : ModuleSig) ->
     (subMs : FinsList ms.length) ->
-    (conn : Connections (m.inputs + totalOutputs {ms} subMs) (m.outputs + totalInputs {ms} subMs)) ->
+    (conn : Connections (m.inpsCount + totalOutputs {ms} subMs) (m.outsCount + totalInputs {ms} subMs)) ->
     (cont : Modules (m::ms)) ->
     Modules ms
 
