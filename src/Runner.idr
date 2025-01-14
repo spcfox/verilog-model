@@ -7,6 +7,7 @@ import Data.List1
 import Data.String
 
 import Test.DepTyCheck.Gen
+import Test.DepTyCheck.Gen.Coverage
 
 import Test.Verilog
 import Test.Verilog.Gen
@@ -48,6 +49,7 @@ record Config m where
   testsCnt   : m Nat
   modelFuel  : m Fuel
   testsDir   : m (Maybe String)
+  covFile    : m (Maybe String)
 
 allNothing : Config Maybe
 allNothing = MkConfig
@@ -56,6 +58,7 @@ allNothing = MkConfig
   , testsCnt   = Nothing
   , modelFuel  = Nothing
   , testsDir   = Nothing
+  , covFile    = Nothing
   }
 
 defaultConfig : IO $ Config Prelude.id
@@ -65,11 +68,12 @@ defaultConfig = pure $ MkConfig
   , testsCnt   = 10
   , modelFuel  = limit 4
   , testsDir   = Nothing
+  , covFile    = Nothing
   }
 
 -- TODO to do this with `barbies`
 mergeCfg : (forall a. m a -> n a -> k a) -> Config m -> Config n -> Config k
-mergeCfg f (MkConfig rs lo tc mf td) (MkConfig rs' lo' tc' mf' td') = MkConfig (f rs rs') (f lo lo') (f tc tc') (f mf mf') (f td td')
+mergeCfg f (MkConfig rs lo tc mf td cf) (MkConfig rs' lo' tc' mf' td' cf') = MkConfig (f rs rs') (f lo lo') (f tc tc') (f mf mf') (f td td') (f cf cf')
 
 parseSeed : String -> Either String $ Config Maybe
 parseSeed str = do
@@ -101,6 +105,9 @@ parseModelFuel str = case parsePositive str of
 parseTestsDir : String -> Either String $ Config Maybe
 parseTestsDir str = Right $ {testsDir := Just $ Just str} allNothing
 
+parseCovFile : String -> Either String $ Config Maybe
+parseCovFile str = Right $ {covFile := Just $ Just str} allNothing
+
 cliOpts : List $ OptDescr $ Config Maybe
 cliOpts =
   [ MkOpt [] ["seed"]
@@ -118,6 +125,9 @@ cliOpts =
   , MkOpt ['o'] ["to", "generate-to"]
       (ReqArg' parseTestsDir "<target-dir>")
       "Sets where to generate the tests."
+  , MkOpt [] ["coverage"]
+      (ReqArg' parseCovFile "<coverage>")
+      "Sets the file path to save the model coverage"
   ]
 
 tail'' : List a -> List a
@@ -149,6 +159,40 @@ createDir' = foldlM createDirHelper (Right ()) . inits . toList . split (=='/') 
 showSeed: StdGen -> String
 showSeed gen = let (seed, gamma) = extractRaw gen in "seed_\{show seed}_\{show gamma}"
 
+forS_ : Monad f => (seed : s) -> LazyList a -> (s -> a -> f s) -> f ()
+forS_ seed []      g = pure ()
+forS_ seed (x::xs) g = forS_ !(g seed x) xs g
+
+-- A shortcut for createDir'
+createDir'' : String -> IO ()
+createDir'' path = do
+  Right () <- createDir' path | Left err => die "Couldn't create dirs for path '\{path}' due to an error: \{show err}"
+  pure()
+
+-- Creates dirs for the file path
+ensureParentDir : String -> IO ()
+ensureParentDir path = case init $ split (=='/') path of
+  []   => pure ()
+  dirs => createDir'' $ joinBy "/" dirs
+
+printModule : Maybe String -> Nat -> Nat -> String -> StdGen -> IO ()
+printModule testsDir testsCnt idx generatedModule seed = case testsDir of
+  Nothing => do
+    putStrLn "// Seed: \{showSeed seed}\n-------------------\n"
+    putStr $ generatedModule
+  Just path => do
+    let padding = countDigit testsCnt
+    let fileName = "\{path}/\{padLeft padding '0' (show idx)}-\{showSeed seed}.sv"
+    writeRes <- writeFile fileName generatedModule
+    case writeRes of
+      Left err => ignore $ fPutStrLn stderr $ show err
+      Right () => putStrLn "[+] Printed file \{fileName}"
+
+printMCov : CoverageGenInfo a -> String -> IO ()
+printMCov cgi path = do
+  Right () <- writeFile path $ show @{Colourful} cgi | Left err => die "Couldn't write the model coverage to file: \{show err}"
+  pure ()
+
 covering
 main : IO ()
 main = do
@@ -160,29 +204,25 @@ main = do
   let cfg : Config Maybe = foldl (mergeCfg (\x, y => x <|> y)) allNothing options
   let cfg : Config Prelude.id = mergeCfg (\m, d => fromMaybe d m) cfg !defaultConfig
 
+  let cgi = initCoverageInfo' `{Modules}
+
   putStrLn "// initial seed: \{show cfg.randomSeed}"
-  let vals = unGenTryAll' cfg.randomSeed $
+  let vals = unGenTryAllD' cfg.randomSeed $
                genModules cfg.modelFuel StdModules >>= map (render cfg.layoutOpts) . prettyModules (limit 1000) StdModulesPV
-  let vals = flip mapMaybe vals $ \gmd => snd gmd >>= \md : String => if nonTrivial md then Just (fst gmd, md) else Nothing
+  let vals = flip mapMaybe vals $ \gmd => snd gmd >>= \(mcov, md) : (ModelCoverage, String) => if nonTrivial md then Just (fst gmd, mcov, md) else Nothing
   let vals = take (limit cfg.testsCnt) vals
 
-  case cfg.testsDir of
-    Nothing => do
-      Lazy.for_ vals $ \(seed, generatedModule) => do
-      putStrLn "-------------------\n"
-      putStr $ generatedModule ++ "// seed after: \{show seed}\n"
-    Just path => do
-      Right () <- createDir' path | Left err => die "Couldn't create dirs due to an error: \{show err}"
-      -- set file name paddings
-      let padding = countDigit cfg.testsCnt
-      let (seeds, modules) = unzip vals
-      let alignedSeeds = cfg.randomSeed::seeds
-      let numberedVals = withIndex $ zip modules alignedSeeds
-      -- print files
-      Lazy.for_ numberedVals $ \(idx, (generatedModule, seed)) => do
-        let fileName = "\{path}/\{padLeft padding '0' (show idx)}-\{showSeed seed}.sv"
-        writeRes <- writeFile fileName generatedModule
-        case writeRes of
-          Left err => putStrLn (show err)
-          Right () => putStrLn "[+] Printed file \{fileName}"
-        pure ()
+  -- Make sure the paths for the files exist
+  whenJust cfg.covFile ensureParentDir
+  whenJust cfg.testsDir $ createDir''
+
+  let (seeds, modules) = unzip vals
+  let alignedSeeds = cfg.randomSeed::seeds
+  let indexedVals = withIndex $ zip alignedSeeds modules
+
+  forS_ cgi indexedVals $ \cgi, (idx, seed, mcov, generatedModule) => do
+    printModule cfg.testsDir cfg.testsCnt idx generatedModule seed
+
+    let cgi = registerCoverage mcov cgi
+    whenJust cfg.covFile $ printMCov cgi
+    pure cgi
