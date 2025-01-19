@@ -1,40 +1,12 @@
 // initial seed: rawStdGen 0 1
 [+] Printed file newdir/newdir/0-seed_0_1.sv
-module l
-  (output bit xrscu, input bit jtlqmgbdz, input bit hsvmic, input integer vxrjbkn, input bit kyjlzwnifc);
-  
-  not z(iyweunvss, kyjlzwnifc);
-  nand ijc(tpak, vxrjbkn, vxrjbkn);
-  
-  assign xrscu = kyjlzwnifc;
-endmodule: l
-
-module spy
-  (output wire sivx, output int evf, output real s, output int tlvbixqr, input uwire hzwsqv, input real ym);
+module eiutwdg
+  (output integer ictbhpoa, output logic [3:3] fzbaa, input bit fy [3:2], input int whqxqe, input real fmpe [2:4]);
   
   
-  assign sivx = ym;
-  assign evf = hzwsqv;
-  assign s = ym;
-  assign tlvbixqr = ym;
-endmodule: spy
-
-module wsceb
-  ( output real nk
-  , output bit ssu
-  , output bit wjvriylpha
-  , output int jreqrimkoo
-  , input int jxkevlvu
-  , input bit tahpg
-  , input integer a
-  , input uwire wfdackf
-  );
-  
-  
-  assign nk = wfdackf;
-  assign ssu = tahpg;
-  assign wjvriylpha = wfdackf;
-  assign jreqrimkoo = jxkevlvu;
-endmodule: wsceb
+  not wzadxqu(iuuqbvtmh, x);
+  not w(iv, iuuqbvtmh);
+  xor epu(ictbhpoa, iv, hesuseq);
+endmodule: eiutwdg
 
 

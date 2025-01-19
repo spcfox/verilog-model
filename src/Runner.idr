@@ -25,11 +25,11 @@ import System.Directory
 
 StdModules : ModuleSigsList
 StdModules =
-  [ MkModuleSig [Logic', Logic'] [Logic']
-  , MkModuleSig [Logic', Logic'] [Logic']
-  , MkModuleSig [Logic', Logic'] [Logic']
-  , MkModuleSig [Logic', Logic'] [Logic']
-  , MkModuleSig [Logic']         [Logic']
+  [ MkModuleSig [Var Logic', Var Logic'] [Var Logic']
+  , MkModuleSig [Var Logic', Var Logic'] [Var Logic']
+  , MkModuleSig [Var Logic', Var Logic'] [Var Logic']
+  , MkModuleSig [Var Logic', Var Logic'] [Var Logic']
+  , MkModuleSig [Var Logic']             [Var Logic']
   ]
 
 StdModulesPV : PrintableModules StdModules
