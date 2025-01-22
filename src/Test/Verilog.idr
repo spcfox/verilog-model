@@ -189,7 +189,7 @@ namespace ConnectionsValidation
   public export
   data CanConnect : PortType -> PortType -> Type where
     CCVarOrPacked : VarOrPacked p1 -> VarOrPacked p2 -> CanConnect p1 p2
-    CCUnpackedUnpacked : {t, s, e, t', s', e' : _} -> EqSVType t t' -> EqNat s s' -> EqNat e e' ->
+    CCUnpackedUnpacked : EqSVType t t' -> EqNat s s' -> EqNat e e' ->
       CanConnect (Arr (Unpacked t s e)) (Arr (Unpacked t' s' e'))
 
   ||| The list of sources may be empty (Nil). In this case, either an implicit net is declared or an external net declaration must exist
@@ -219,8 +219,7 @@ data Modules : ModuleSigsList -> Type where
   NewCompositeModule :
     (m : ModuleSig) ->
     (subMs : FinsList ms.length) ->
-    (sssi : Connections (m.inputs ++ allOutputs {ms} subMs) (allInputs {ms} subMs)) ->
-    (ssto : Connections (allOutputs {ms} subMs) (m.outputs)) ->
+    (sssi : Connections (m.inputs ++ allOutputs {ms} subMs) (allInputs {ms} subMs ++ m.outputs)) ->
     (cont : Modules (m::ms)) ->
     Modules ms
 

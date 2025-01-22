@@ -1,12 +1,27 @@
 // initial seed: rawStdGen 0 1
 [+] Printed file newdir/newdir/0-seed_0_1.sv
-module eiutwdg
-  (output integer ictbhpoa, output logic [3:3] fzbaa, input bit fy [3:2], input int whqxqe, input real fmpe [2:4]);
+module h
+  (output integer bohvl, output logic [3:3] erswoodzc, input bit aqwfs [3:2], input int whovhmm, input real axymuf [2:4]);
   
   
-  not wzadxqu(iuuqbvtmh, x);
-  not w(iv, iuuqbvtmh);
-  xor epu(ictbhpoa, iv, hesuseq);
-endmodule: eiutwdg
+  not lrupcio(mqa, mqa);
+  not gmjrn(bohvl, mqa);
+  
+endmodule: h
+
+module shkg
+  (output int xq, output bit [2:1] zy, input int gtlqf [2:0], input int wlrkzukunw [2:0]);
+  
+  
+  nand m(xq, xq, xq);
+  
+endmodule: shkg
+
+module fppxzdqch
+  (output bit ypxv [2:1], input uwire zm);
+  
+  
+  
+endmodule: fppxzdqch
 
 
