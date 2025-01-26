@@ -1,27 +1,33 @@
 // initial seed: rawStdGen 0 1
 [+] Printed file newdir/newdir/0-seed_0_1.sv
-module h
-  (output integer bohvl, output logic [3:3] erswoodzc, input bit aqwfs [3:2], input int whovhmm, input real axymuf [2:4]);
+module wmsebrlm
+  ( output bit [4:3] nikyot
+  , output integer fzzwdkfwwk
+  , output wire t
+  , output int ipctiu
+  , input bit mktvfwz
+  , input logic [2:4] vk
+  , input bit aqbmsi
+  );
   
   
-  not lrupcio(mqa, mqa);
-  not gmjrn(bohvl, mqa);
   
-endmodule: h
+  assign fzzwdkfwwk = aqbmsi;
+endmodule: wmsebrlm
 
-module shkg
-  (output int xq, output bit [2:1] zy, input int gtlqf [2:0], input int wlrkzukunw [2:0]);
+module ecxjyu
+  (output bit [1:0] k, output uwire fwemupzbpu [4:2], output bit da [4:2], input bit xxxnfljq, input real winfuj, input int x);
   
   
-  nand m(xq, xq, xq);
   
-endmodule: shkg
+  assign k = x;
+endmodule: ecxjyu
 
-module fppxzdqch
-  (output bit ypxv [2:1], input uwire zm);
+module asudin
+  (output int sbtiopr, output wire tdesg [4:2], output real kk, input bit n [0:1]);
   
   
   
-endmodule: fppxzdqch
+endmodule: asudin
 
 

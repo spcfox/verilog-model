@@ -69,12 +69,12 @@ namespace SVTypes
   ||| an unpacked array is not guaranteed to be represented as a contiguous set of bits
   public export
   data SVArray : SVType -> Nat -> Nat -> Type where
-    Packed     : (t : SVType) -> (start : Nat) -> (end : Nat) -> AllowedInPackedArr t -> SVArray t start end
     Unpacked   : (t : SVType) -> (start : Nat) -> (end : Nat) -> SVArray t start end
+    Packed     : (t : SVType) -> (start : Nat) -> (end : Nat) -> AllowedInPackedArr t -> SVArray t start end
 
 namespace Ports
   public export
-  data PortType = Var SVType | Arr (SVArray _ _ _)
+  data PortType = Arr (SVArray _ _ _) | Var SVType
 
   public export
   data PortsList = Nil | (::) PortType PortsList
@@ -189,7 +189,10 @@ namespace ConnectionsValidation
   public export
   data CanConnect : PortType -> PortType -> Type where
     CCVarOrPacked : VarOrPacked p1 -> VarOrPacked p2 -> CanConnect p1 p2
-    CCUnpackedUnpacked : EqSVType t t' -> EqNat s s' -> EqNat e e' ->
+    ||| 6.22.2 Equivalent types
+    ||| d) Unpacked fixed-size array types are equivalent if they have equivalent element types and equal size.
+    ||| IEEE 1800 - 2023
+    CCUnpackedUnpacked : EqSVType t t' -> EqNat (plus s s') (plus e e') ->
       CanConnect (Arr (Unpacked t s e)) (Arr (Unpacked t' s' e'))
 
   ||| The list of sources may be empty (Nil). In this case, either an implicit net is declared or an external net declaration must exist
