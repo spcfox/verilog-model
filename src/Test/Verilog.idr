@@ -43,28 +43,80 @@ namespace SVTypes
   ||| | wor     | Same as trior; “1” wins in all cases                    |
   ||| | supply0 | Net with supply strength to model “gnd”                 |
   ||| | supply1 | Net with supply strength to model “power”               |
+  |||
+  ||| Ashok B. Mehta. Introduction to SystemVerilog, 2021
   public export
   data SVType = Logic' | Wire' | Uwire' | Int' | Integer' | Bit' | Real'
 
   public export
-  data ConnectionsList = Nil | (::) SVType ConnectionsList
+  data EqSVType : SVType -> SVType -> Type where
+    EqLogic'   : EqSVType Logic'   Logic'
+    EqWire'    : EqSVType Wire'    Wire'
+    EqUwire'   : EqSVType Uwire'   Uwire'
+    EqInt'     : EqSVType Int'     Int'
+    EqInteger' : EqSVType Integer' Integer'
+    EqBit'     : EqSVType Bit'     Bit'
+    EqReal'    : EqSVType Real'    Real'
+
+  ||| Packed arrays can be made of only the single bit data types (bit, logic, reg)
+  public export
+  data AllowedInPackedArr : SVType -> Type where
+    B : AllowedInPackedArr Bit'
+    L : AllowedInPackedArr Logic'
+    -- R : AllowedInPackedArr Reg' -- Uncomment when Reg is added to the SVType
+
+  ||| The main difference between an unpacked array and a packed array is that
+  ||| an unpacked array is not guaranteed to be represented as a contiguous set of bits
+  public export
+  data SVArray : SVType -> Nat -> Nat -> Type where
+    Unpacked   : (t : SVType) -> (start : Nat) -> (end : Nat) -> SVArray t start end
+    Packed     : (t : SVType) -> (start : Nat) -> (end : Nat) -> AllowedInPackedArr t -> SVArray t start end
+
+namespace Ports
+  public export
+  data PortType = Arr (SVArray _ _ _) | Var SVType
 
   public export
-  length : ConnectionsList -> Nat
+  data PortsList = Nil | (::) PortType PortsList
+
+  public export
+  length : PortsList -> Nat
   length []      = Z
   length (_::ms) = S $ length ms
 
   public export %inline
-  (.length) : ConnectionsList -> Nat
+  (.length) : PortsList -> Nat
   (.length) = length
+
+  public export
+  (++) : PortsList -> PortsList -> PortsList
+  Nil       ++ ys = ys
+  (x :: xs) ++ ys = x :: (xs ++ ys)
+
+  public export
+  toList : PortsList -> List PortType
+  toList []        = []
+  toList (x :: xs) = x :: toList xs
+
+  export
+  portsListAppendLen : (xs : PortsList) -> (ys : PortsList) -> length xs + length ys = length (xs ++ ys)
+  portsListAppendLen []        ys = Refl
+  portsListAppendLen (_ :: xs) ys = rewrite portsListAppendLen xs ys in Refl
+
+  -- Maybe, specialised type `IndexIn : PortsList -> Type` isomorphic to `Fin (length xs)`
+
+  public export
+  typeOf : (xs : PortsList) -> Fin (length xs) -> PortType
+  typeOf (p::_ ) FZ     = p
+  typeOf (_::ps) (FS i) = typeOf ps i
 
 namespace ModuleSig
 
   public export
   record ModuleSig where
     constructor MkModuleSig
-    inputs  : ConnectionsList
-    outputs : ConnectionsList
+    inputs  : PortsList
+    outputs : PortsList
 
   public export
   (.inpsCount) : ModuleSig -> Nat
@@ -115,33 +167,62 @@ namespace FinsList
   (.length) (x::xs) = S xs.length
 
 public export
-totalInputs : {ms : ModuleSigsList} -> FinsList ms.length -> Nat
-totalInputs []      = 0
-totalInputs (i::is) = (index ms i).inpsCount + totalInputs is
+allInputs : {ms : ModuleSigsList} -> FinsList ms.length -> PortsList
+allInputs []      = []
+allInputs (i::is) = (index ms i).inputs ++ allInputs is
 
 public export
-totalOutputs : {ms : ModuleSigsList} -> FinsList ms.length -> Nat
-totalOutputs []      = 0
-totalOutputs (i::is) = (index ms i).outsCount + totalOutputs is
+allOutputs : {ms : ModuleSigsList} -> FinsList ms.length -> PortsList
+allOutputs []      = []
+allOutputs (i::is) = (index ms i).outputs ++ allOutputs is
 
--- equivalent of `Vect outs (Fin ins)`
--- Each output has a connection from some single input.
--- Each input can go to several outputs.
-public export
-data Connections : (ins, outs : Nat) -> Type where
-  Nil  : Connections ints Z
-  (::) : Fin ins -> Connections ins outs -> Connections ins (S outs)
+namespace ConnectionsValidation
+  public export
+  data EqNat : Nat -> Nat -> Type where
+    Same : (x : Nat) -> EqNat x x
+
+  public export
+  data VarOrPacked : PortType -> Type where
+    V : VarOrPacked (Var _)
+    P : VarOrPacked (Arr (Packed _ _ _ _))
+
+  public export
+  data CanConnect : PortType -> PortType -> Type where
+    CCVarOrPacked : VarOrPacked p1 -> VarOrPacked p2 -> CanConnect p1 p2
+    ||| 6.22.2 Equivalent types
+    ||| d) Unpacked fixed-size array types are equivalent if they have equivalent element types and equal size.
+    ||| IEEE 1800 - 2023
+    CCUnpackedUnpacked : EqSVType t t' -> EqNat (plus s s') (plus e e') ->
+      CanConnect (Arr (Unpacked t s e)) (Arr (Unpacked t' s' e'))
+
+  ||| The list of sources may be empty (Nil). In this case, either an implicit net is declared or an external net declaration must exist
+  |||
+  ||| > If an identifier is used in a port expression declaration,
+  ||| then an implicit net of default net type shall be assumed, with the vector width of the port expression declaration.
+  ||| IEEE 1800-2023
+  public export
+  data SourceForSink : (srcs : PortsList) -> (sink : PortType) -> Type where
+      NoSource     : SourceForSink srcs sink
+      SingleSource : (srcIdx : Fin $ length srcs) -> CanConnect (typeOf srcs srcIdx) sink -> SourceForSink srcs sink
+
+namespace ConnsList
+  ||| Each output has a connection from some single input.
+  ||| Each input can go to several outputs.
+  public export
+  data Connections : (srcs, sinks : PortsList) -> Type where
+    Nil  : Connections srcs []
+    (::) : SourceForSink srcs sink -> Connections srcs sinks -> Connections srcs (sink :: sinks)
 
 public export
 data Modules : ModuleSigsList -> Type where
 
   End : Modules ms
 
-  -- module containing only of submodules and connections
+  ||| A module containing submodules and connections.
   NewCompositeModule :
     (m : ModuleSig) ->
     (subMs : FinsList ms.length) ->
-    (conn : Connections (m.inpsCount + totalOutputs {ms} subMs) (m.outsCount + totalInputs {ms} subMs)) ->
+    (sssi : Connections (m.inputs ++ allOutputs {ms} subMs) (allInputs {ms} subMs ++ m.outputs)) ->
     (cont : Modules (m::ms)) ->
     Modules ms
 

@@ -1,40 +1,33 @@
 // initial seed: rawStdGen 0 1
 [+] Printed file newdir/newdir/0-seed_0_1.sv
-module l
-  (output bit xrscu, input bit jtlqmgbdz, input bit hsvmic, input integer vxrjbkn, input bit kyjlzwnifc);
-  
-  not z(iyweunvss, kyjlzwnifc);
-  nand ijc(tpak, vxrjbkn, vxrjbkn);
-  
-  assign xrscu = kyjlzwnifc;
-endmodule: l
-
-module spy
-  (output wire sivx, output int evf, output real s, output int tlvbixqr, input uwire hzwsqv, input real ym);
-  
-  
-  assign sivx = ym;
-  assign evf = hzwsqv;
-  assign s = ym;
-  assign tlvbixqr = ym;
-endmodule: spy
-
-module wsceb
-  ( output real nk
-  , output bit ssu
-  , output bit wjvriylpha
-  , output int jreqrimkoo
-  , input int jxkevlvu
-  , input bit tahpg
-  , input integer a
-  , input uwire wfdackf
+module wmsebrlm
+  ( output bit [4:3] nikyot
+  , output integer fzzwdkfwwk
+  , output wire t
+  , output int ipctiu
+  , input bit mktvfwz
+  , input logic [2:4] vk
+  , input bit aqbmsi
   );
   
   
-  assign nk = wfdackf;
-  assign ssu = tahpg;
-  assign wjvriylpha = wfdackf;
-  assign jreqrimkoo = jxkevlvu;
-endmodule: wsceb
+  
+  assign fzzwdkfwwk = aqbmsi;
+endmodule: wmsebrlm
+
+module ecxjyu
+  (output bit [1:0] k, output uwire fwemupzbpu [4:2], output bit da [4:2], input bit xxxnfljq, input real winfuj, input int x);
+  
+  
+  
+  assign k = x;
+endmodule: ecxjyu
+
+module asudin
+  (output int sbtiopr, output wire tdesg [4:2], output real kk, input bit n [0:1]);
+  
+  
+  
+endmodule: asudin
 
 
