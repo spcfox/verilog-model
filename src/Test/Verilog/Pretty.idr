@@ -5,7 +5,6 @@ import Data.List
 import Data.List.Extra
 import Data.List1
 import Data.List.Lazy
-import Data.Vect.Extra
 
 import Data.Fin.Split
 import Data.Fuel
@@ -276,16 +275,21 @@ resolveSinks sinks srcNames x names un = do
 ||| IEEE 1800-2023
 |||
 ||| The default net type is wire. It could be changed to another net type using `default_nettype` directive.
-||| Net types aren't compatible with unpacked arrays. So connections to unpacked array ports must be declared explicitly
-unpackedDecl : PortType -> String -> Maybe String
-unpackedDecl (Arr (Unpacked t s e)) name = Just $ printSVArr (Unpacked t s e) name
-unpackedDecl _ _ = Nothing
+||| Net types aren't compatible with unpacked arrays. So connections to unpacked array ports must be declared explicitly.
+|||
+||| Prints an explicit declaration for each submodule input that's not connected to any source
+resolveUnpSI : Vect sk String -> List ((Fin sk, Maybe a), PortType) -> List String
+resolveUnpSI names = mapMaybe resolve' where
+  resolve' : ((Fin sk, Maybe a), PortType) -> Maybe String
+  resolve' ((finSK, Nothing), Arr u@(Unpacked {})) = Just $ printSVArr u $ index finSK names
+  resolve' _                                       = Nothing
 
-resolveUnpacked : List (PortType, String) -> List String
-resolveUnpacked []             = []
-resolveUnpacked ((p, s) :: xs) = case unpackedDecl p s of
-  Nothing  =>        resolveUnpacked xs
-  Just unp => unp :: resolveUnpacked xs
+||| Prints an explicit declaration for each submodule output connected to a submodule input or not connected at all.
+||| Doesn't print declaration for ports connected to top outputs
+resolveUnpSO : Foldable c => Foldable d => c String -> d (String, PortType) -> List String
+resolveUnpSO tops = flip foldr [] $ \case
+  (n, Arr u@(Unpacked {})) => if elem n tops then id else with Prelude.(::) (printSVArr u n ::)
+  _ => id {a=List String}
 
 ||| filter `top inputs -> top outputs` connections
 filterTITO : Vect n (Maybe (Fin ss)) -> (inps : Nat) -> Vect n (Maybe (Fin inps))
@@ -312,6 +316,9 @@ resolveConAssigns v outNames inpNames = map (resolveConn outNames inpNames) $ wi
     Nothing     => Nothing
     Just finInp => Just $ printAssign (index finOut outNames) (index finInp inpNames)
 
+-- zip PortsList with List
+zipPLWList : Foldable b => b a -> PortsList -> List (a, PortType)
+zipPLWList other ports = toList other `zip` toList ports
 
 export
 prettyModules : {opts : _} -> {ms : _} -> Fuel ->
@@ -342,8 +349,8 @@ prettyModules x pms @{un} (NewCompositeModule m subMs sssi cont) = do
   let (_ ** tito) = catMaybes $ resolveConAssigns (filterTITO toss m.inpsCount) outputNames inputNames
 
   -- Unpacked arrays declarations
-  let unpackedDecls = resolveUnpacked $ zip (toList $ allInputs  {ms} subMs) (toList subMINames)
-                                     ++ zip (toList $ allOutputs {ms} subMs) (toList subMONames)
+  let unpackedDecls = resolveUnpSI subMINames (withIndex siss `zipPLWList` allInputs {ms} subMs)
+                   ++ resolveUnpSO outputNames (subMONames `zipPLWList` allOutputs {ms} subMs)
 
   -- Save generated names
   let generatedPrintableInfo : ?
