@@ -1,43 +1,59 @@
 [+] Printed file newdir/newdir/1-seed_0,1.sv
 // Seed: 0,1
 
-module q
-  ( output logic [4:2][3:2] msixeyfxa
-  , output real i [4:3][3:4]
-  , output uwire pavctyy [3:4][1:0]
-  , output uwire s
-  , input bit fklz
-  , input bit wwd
+module rp
+  ( output reg [2:4][1:1][0:0] vt
+  , input logic [4:2][3:2] hbwkk [4:3]
+  , input logic [4:3][3:4][0:4][2:0] bu
+  , input wor logic [4:1][0:2][0:2][1:4] b [4:3][4:3][3:1]
+  , input realtime jbvnjqeirl [3:0]
   );
   
   
-  not wqyv(fcde, s);
+  or g(lxbfosu, gluhqznvfm, qzc);
   
-  xor qozr(s, xrftgz, fcde);
-  
-  
-  // Top inputs -> top outputs assigns
-  assign msixeyfxa = fklz;
-  
-  // Assigns
-  assign pavctyy = '{'{'b0,'b1},'{'b1,'b0}};
-  assign i = '{'{'b0,'b0},'{'b0,'bx}};
-  assign fcde = 'b0;
-  assign fcde = 'bx;
-  assign fcde = 'bx;
-  assign fcde = 'b1;
-endmodule: q
-
-module npkwmgqlv
-  (input logic [4:4] syu [0:4], input logic o, input integer njrloeraq [1:0][3:1]);
-  
+  nand uvksjvtcf(qzc, zkkwjo, qzc);
   
   
   // Top inputs -> top outputs assigns
   
-  // Assigns
-endmodule: npkwmgqlv
+  // Single-driven assigns
+  assign zkkwjo = 'b1;
+  
+  // Multi-driven assigns
+  assign qzc = 'b0;
+  assign qzc = 'bz;
+endmodule: rp
+
+module oltt
+  ( output tri0 logic djgrv
+  , output reg [2:1][0:2][1:0] k
+  , output tri0 logic [1:4][1:0] irgz [2:2][1:0][4:2]
+  , output bit [3:2][0:4] yfvbrtdptx [0:3]
+  , input uwire logic [2:0][0:3] vrtulmhea [1:4]
+  , input wire logic jc [4:4]
+  , input int hscdayitog
+  , input wor logic [3:0][1:3] kqrkegki [1:0][2:1]
+  );
+  
+  
+  nand yaoxqlg(f, f, xlwras);
+  
+  and oatq(djgrv, f, ebswt);
+  
+  
+  // Top inputs -> top outputs assigns
+  
+  // Single-driven assigns
+  assign yfvbrtdptx = '{'b1,'b0,'b0,'b1};
+  assign irgz = '{'{'{'bz,'b1,'bx},'{'b0,'bz,'b0}}};
+  assign ebswt = 'b1;
+  
+  // Multi-driven assigns
+  assign kqrkegki = '{'{'bz,'bz},'{'b1,'b1}};
+  assign irgz = '{'{'{'b1,'b1,'b0},'{'b1,'bx,'bz}}};
+endmodule: oltt
 
 
 
-// Seed after: 7347,1
+// Seed after: 13424,1

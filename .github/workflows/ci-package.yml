@@ -56,7 +56,7 @@ jobs:
   build-and-test:
     name: Build and test `${{ github.repository }}`
     needs: get-upstream-matrix
-    timeout-minutes: 128
+    timeout-minutes: 228
     runs-on: ubuntu-latest
     container: ghcr.io/stefan-hoeck/idris2-pack:latest
     outputs:
@@ -71,7 +71,7 @@ jobs:
       - name: Calculate cache key
         id: cache-key
         run: |
-          echo "key=build-${{ hashFiles('src/**', 'verilog-model.ipkg', 'pack.toml') }}" >> $GITHUB_OUTPUT
+          echo "key=build-${{ hashFiles('src/**', 'verilog-model.ipkg', 'pack.toml') }}-${{ matrix.upstream-mode }}" >> $GITHUB_OUTPUT
       - name: Restore from cache
         id: cache-build
         uses: actions/cache/restore@v4
@@ -168,10 +168,10 @@ jobs:
               iverilog -V
             run: iverilog -g2012 -o a.out {file}
             error_regex: |
-              (error|sorry|assert): [\S ]+$
+              (syntax error\W[A-z-\/0-9,.:]+ .*$|(error|sorry|assert|vvp): [\S ]+$)
             sim_cmd: vvp a.out
             sim_error_regex: |
-              (error|sorry|vvp|assert): [\S ]+$
+              (syntax error\W[A-z-\/0-9,.:]+ .*$|(error|sorry|assert|vvp): [\S ]+$)
 
           - name: slang
             repo: https://github.com/MikePopoloski/slang.git
@@ -333,7 +333,7 @@ jobs:
               cd ..
               bash .github/workflows/runner/rename_tests.sh
             version: yosys --version
-            run: yosys -m slang -p 'read -sv2012 {file}; hierarchy -check -top {top_module}; proc; opt; fsm; memory; sim -assert; clean'
+            run: yosys -m slang -p 'read_slang {file}; hierarchy -check -top {top_module}; proc; opt; fsm; memory; sim -assert; clean'
             error_regex: >
               ERROR:[A-z0-9, \"'\[\]=()]+
 

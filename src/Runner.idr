@@ -12,7 +12,6 @@ import Test.DepTyCheck.Gen
 import Test.DepTyCheck.Gen.Coverage
 
 import Test.Verilog.Connections.Derived
-import Test.Verilog.CtxPorts.Derived
 import Test.Verilog.Assign.Derived
 import Test.Verilog.Literal.Derived
 
@@ -31,11 +30,11 @@ import System.Directory
 
 StdModules : ModuleSigsList
 StdModules =
-  [ MkModuleSig [Var Logic', Var Logic'] [Var Logic']
-  , MkModuleSig [Var Logic', Var Logic'] [Var Logic']
-  , MkModuleSig [Var Logic', Var Logic'] [Var Logic']
-  , MkModuleSig [Var Logic', Var Logic'] [Var Logic']
-  , MkModuleSig [Var Logic']             [Var Logic']
+  [ MkModuleSig [Var $ SVar Logic', Var $ SVar Logic'] [Var $ SVar Logic']
+  , MkModuleSig [Var $ SVar Logic', Var $ SVar Logic'] [Var $ SVar Logic']
+  , MkModuleSig [Var $ SVar Logic', Var $ SVar Logic'] [Var $ SVar Logic']
+  , MkModuleSig [Var $ SVar Logic', Var $ SVar Logic'] [Var $ SVar Logic']
+  , MkModuleSig [Var $ SVar Logic']                    [Var $ SVar Logic']
   ]
 
 StdModulesPV : PrintableModules StdModules
@@ -235,15 +234,15 @@ printMCov cgi path = do
   Right () <- writeFile path $ show @{Colourful} cgi | Left err => die "Couldn't write the model coverage to file: \{show err}"
   pure ()
 
-finLookup : (y: FinsList n) -> (List $ Fin $ y.length) -> List $ Fin n
+finLookup : (y : FinsList n) -> (List $ Fin $ y.length) -> List $ Fin n
 finLookup xs []        = []
 finLookup xs (y :: ys) = index xs y :: finLookup xs ys
 
-selectPorts : (ports: PortsList) -> (List $ Fin $ ports.length) -> PortsList
-selectPorts p []        = []
-selectPorts p (x :: xs) = typeOf p x :: selectPorts p xs
+selectPorts' : {mc : _} -> (mcs : MultiConnectionsVect l mc) -> List (Fin l) -> SVObjList
+selectPorts' p []        = []
+selectPorts' p (x :: xs) = find p x :: selectPorts' p xs
 
-tryToFitL : {to: _} -> List (Fin a) -> List (Fin to)
+tryToFitL : {to : _} -> List (Fin a) -> List (Fin to)
 tryToFitL []      = []
 tryToFitL (x::xs) = case tryToFit x of
   Nothing => tryToFitL xs
@@ -251,44 +250,33 @@ tryToFitL (x::xs) = case tryToFit x of
 
 gen : Fuel -> Gen MaybeEmpty $ ExtendedModules StdModules
 gen x = do
-  rawMS <- genModules x StdModules @{genSourceForSink} @{genConnections}
+  rawMS <- genModules x StdModules @{genConns}
   res <- extend x rawMS
   pure res where
-    ||| Continuous assignments to singledriven types are illegal when assigned to top input ports and submodule output ports
-    |||
-    ||| So unconnected sumbodule inputs and unconnected top outputs are available for singledriven continuous assignment
-    portsToAssign : Vect sk (Maybe $ Fin ss) -> FinsList sk
-    portsToAssign v = do
-      let (_ ** res) = catMaybes $ map resolve' $ withIndex v
-      fromVect res where
-        resolve': (Fin sk, Maybe $ Fin ss) -> Maybe $ Fin sk
-        resolve' (x, Nothing) = Just x
-        resolve' (x, (Just y)) = Nothing
-
     extend : Fuel -> {ms: _} -> Modules ms -> Gen MaybeEmpty $ ExtendedModules ms
     extend _ End = pure End
-    extend x (NewCompositeModule m subMs sssi ssto cont) = do
-      let siss = connFwdRel sssi
-      let toss = connFwdRel ssto
-      -- Gen single driven assigns
-      let ptaSISS = portsToAssign siss
-      rawSInpsSD <- genSingleDriven x ptaSISS @{genFINSD}
-      let ptaTOSS = portsToAssign toss
-      rawTOutsSD <- genSingleDriven x ptaTOSS @{genFINSD}
-      -- Gen multi driven assigns
-      rawMD <- genMultiDriven x (m.inputs ++ allOutputs {ms} subMs) m.inpsCount (allInputs {ms} subMs) (toMFL siss) m.outputs (toMFL toss)
-      let assignsSS = toListSSs rawMD
-      let assignsSInps = toListSkSbInps rawMD  ++ (finLookup ptaSISS $ toList rawSInpsSD)
-      let assignsTOuts = toListSkTopOuts rawMD ++ (finLookup ptaTOSS $ toList rawTOutsSD)
+    extend x modules@(NewCompositeModule m {ms} subMs {sicons} {tocons} sssi ssto cont) = do
+      -- Resolve mcs
+      let (l ** mcs) = resolveMultiConnections $ SC ms m subMs sicons tocons
+
+      -- Gen Assigns
+      let sdmcs = portsToAssign mcs
+      (rawSdAssigns ** uf) <- genUniqueFins x (sdmcs.length)
+      let sdAssigns = finLookup sdmcs rawSdAssigns.asList
+      rawMdAssigns <- genMDAssigns x mcs
+      let mdAssigns = (toFinsList rawMdAssigns).asList
+
       -- Gen literals
-      literals <- genLiterals x $ selectPorts (allInputs {ms} subMs)              assignsSInps 
-                               ++ selectPorts (m.outputs)                         assignsTOuts 
-                               ++ selectPorts (m.inputs ++ allOutputs {ms} subMs) assignsSS
+      sdLiterals <- genLiterals @{genBinVect} x $ selectPorts' mcs sdAssigns
+      mdLiterals <- genLiterals @{genBinVect} x $ selectPorts' mcs mdAssigns
+
       -- Extend the rest
       contEx <- extend x cont
+
       -- Gen port types for current context
-      (ports ** _) <- genCtx x m ms subMs (connsToMFL sssi) (connsToMFL ssto) (allFins subMs.length)
-      pure $ NewCompositeModule m subMs sssi ssto assignsSInps assignsTOuts assignsSS literals contEx ports
+      let ports = resolveLocalCtxPortTypes modules
+
+      pure $ NewCompositeModule m subMs sssi ssto mcs sdAssigns sdLiterals mdAssigns mdLiterals ports contEx
 
 covering
 main : IO ()
@@ -305,7 +293,7 @@ main = do
     putStrLn usage
     exitSuccess
 
-  let cgi = initCoverageInfo'' [`{Modules}, `{SingleDrivenAssigns}, `{MultiDrivenAssigns}, `{LiteralsList}]
+  let cgi = initCoverageInfo'' [`{Modules}, `{LiteralsList}] -- `{SingleDrivenAssigns}, `{MultiDrivenAssigns},
 
   let vals = unGenTryAllD' cfg.randomSeed $ gen cfg.modelFuel >>= map (render cfg.layoutOpts) . prettyModules (limit 1000) StdModulesPV
   let vals = flip mapMaybe vals $ \gmd => snd gmd >>= \(mcov, md) : (ModelCoverage, String) =>
