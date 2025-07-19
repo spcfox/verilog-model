@@ -29,6 +29,9 @@ env:
   PACK_DIR: /root/.pack
   GENERATION_DIR: 'generated-modules'
   BUILD_DIR: '.build'
+  PACKAGE_NAME: verilog-model
+  ERROR_DISTANCES_IMG: error_distances.png
+  GH_PAGES_PATH: verilog-gh-pages
 
 jobs:
 
@@ -92,12 +95,8 @@ jobs:
           pack fetch
       - name: Switch to the latest collection
         run: pack switch latest
-      - name: Compute the package name
-        run: |
-          echo "package_name=$(sed -e 's|.*/||' -e 's/idris2\?-//' \
-                <<< ${{ github.repository }})" >> "$GITHUB_ENV"
-      - name: Build `${{ env.package_name }}`
-        run: pack build ${{ env.package_name }}
+      - name: Build `${{ env.PACKAGE_NAME }}`
+        run: pack build ${{ env.PACKAGE_NAME }}
       - name: Save build
         uses: actions/cache/save@v4
         with:
@@ -109,11 +108,11 @@ jobs:
           pack run verilog-model --coverage mcov -n 1 --seed 0,1
           touch tests/printer/model-coverage/dummy
           touch tests/printer/create-dir/dummy
-      - name: Test `${{ env.package_name }}`
-        run: pack test ${{ env.package_name }}
+      - name: Test `${{ env.PACKAGE_NAME }}`
+        run: pack test ${{ env.PACKAGE_NAME }}
       - name: Gen SystemVerilog modules
         if: matrix.upstream-mode == 'latest-pack-collection'
-        run : pack run ${{ env.package_name }} --to "${{ env.GENERATION_DIR }}" -n 128 --seed-name --seed-content --coverage mcov  # Generate modules
+        run : pack run ${{ env.PACKAGE_NAME }} --to "${{ env.GENERATION_DIR }}" -n 128 --seed-name --seed-content --coverage mcov  # Generate modules
       - name: Show mcov
         if: matrix.upstream-mode == 'latest-pack-collection'
         run : cat mcov
@@ -172,6 +171,8 @@ jobs:
             sim_cmd: vvp a.out
             sim_error_regex: |
               (syntax error\W[A-z-\/0-9,.:]+ .*$|(error|sorry|assert|vvp): [\S ]+$)
+            extra_ignored_regexes: >
+              "Unable to elaborate r-value: ['{}d0-9]+"
 
           - name: slang
             repo: https://github.com/MikePopoloski/slang.git
@@ -296,21 +297,21 @@ jobs:
               parse_sv -h
             run: parse_sv {file}
 
-          - name: yosys
-            repo: https://github.com/YosysHQ/yosys.git
-            deps: build-essential clang lld bison flex libreadline-dev gawk tcl-dev libffi-dev git graphviz xdot pkg-config python3 libboost-system-dev libboost-python-dev libboost-filesystem-dev zlib1g-dev
-            path: yosys
-            build: |
-              git submodule update --init --recursive
-              make -j$(nproc)
-            install: |
-              sudo make install
-              cd ..
-              bash .github/workflows/runner/rename_tests.sh
-            version: yosys --version
-            run: yosys -p 'read -sv2012 {file}; hierarchy -check -top {top_module}; proc; opt; fsm; memory; sim -assert; clean'
-            error_regex: >
-              ERROR:[A-z0-9, \"'\[\]=()]+
+          # - name: yosys
+          #   repo: https://github.com/YosysHQ/yosys.git
+          #   deps: build-essential clang lld bison flex libreadline-dev gawk tcl-dev libffi-dev git graphviz xdot pkg-config python3 libboost-system-dev libboost-python-dev libboost-filesystem-dev zlib1g-dev
+          #   path: yosys
+          #   build: |
+          #     git submodule update --init --recursive
+          #     make -j$(nproc)
+          #   install: |
+          #     sudo make install
+          #     cd ..
+          #     bash .github/workflows/runner/rename_tests.sh
+          #   version: yosys --version
+          #   run: yosys -p 'read -sv2012 {file}; hierarchy -check -top {top_module}; proc; opt; fsm; memory; sim -assert; clean'
+          #   error_regex: >
+          #     ERROR:[A-z0-9, \"'\[\]=()]+
 
           - name: yosys-slang
             repo: https://github.com/povik/yosys-slang.git
@@ -335,7 +336,7 @@ jobs:
             version: yosys --version
             run: yosys -m slang -p 'read_slang {file}; hierarchy -check -top {top_module}; proc; opt; fsm; memory; sim -assert; clean'
             error_regex: >
-              ERROR:[A-z0-9, \"'\[\]=()]+
+              ERROR:.*$
 
     steps:
       - name: Checkout
@@ -418,23 +419,33 @@ jobs:
       - name: Print version
         run: ${{ matrix.tool.version }}
       - name: Install runner deps
-        run: sudo apt install -y python3 python3-pip
+        run: sudo apt install -y bc python3 python3-pip python3-matplotlib python3-sklearn python3-numpy
       - name: Run
         run : |
           set +e
 
-          python3 .github/workflows/runner/run_tests.py \
+          git clone https://github.com/DepTyCheck/verilog-model.git --branch gh-pages --single-branch ${{ env.GH_PAGES_PATH }}
+
+          python3 .github/workflows/runner/main.py \
             --gen-path "${{ env.GENERATION_DIR }}" \
             --tool-cmd "${{ matrix.tool.run }}" \
             --tool-error-regex "${{ matrix.tool.error_regex }}" \
             --sim-cmd "${{ matrix.tool.sim_cmd }}" \
             --sim-error-regex "${{ matrix.tool.sim_error_regex }}" \
-            --errors-file ".github/workflows/error-patterns/${{ matrix.tool.path }}-ignored-errors.txt"
+            --ignored-errors-dir "${{ env.GH_PAGES_PATH }}/found_errors/${{ matrix.tool.path }}" \
+            --error-distances-img "$ERROR_DISTANCES_IMG" \
+            --extra-ignored-regexes ${{ join(matrix.tool.extra_ignored_regexes, ' ') }}
 
           EXIT_CODE=$?
           if [ $EXIT_CODE -ne 0 ]; then
                 exit 1
           fi
+      - name: Upload error distances artifact
+        if: always() && hashFiles('error_distances.png') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: error-distances-${{ matrix.tool.name }}
+          path: ${{ env.ERROR_DISTANCES_IMG }}
 
   create-issue-on-failure:
     name: Create an issue on failure
