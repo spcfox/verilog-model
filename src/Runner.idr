@@ -1,19 +1,21 @@
 module Runner
 
 import Data.Fuel
+import Data.List
 import Data.List.Lazy
 import Data.List.Lazy.Extra
 import Data.List1
 import Data.String
 import Data.Fin
 import Data.Vect.Extra
+import Debug.Trace
 
 import Test.DepTyCheck.Gen
 import Test.DepTyCheck.Gen.Coverage
 
+import Test.Common.UniqueFins.Derived
 import Test.Verilog.Connections.Derived
-import Test.Verilog.Assign.Derived
-import Test.Verilog.Literal.Derived
+import Test.Verilog.TMPExpression.Derived
 
 import Test.Verilog.Pretty
 
@@ -221,7 +223,7 @@ printModule : Cfg -> Nat -> String -> StdGen -> StdGen -> IO ()
 printModule cfg idx generatedModule initialSeed seedAfter = do
   let text = content cfg generatedModule initialSeed seedAfter
   case cfg.testsDir of
-    Nothing   => putStr $ text ++ "--------------------------\n\n"
+    Nothing   => putStr $ "-------------------------- # \{show $ S idx} --------------------------\n\n" ++ text
     Just path => do
       let file = fileName cfg path idx initialSeed
       writeRes <- writeFile file text
@@ -234,49 +236,36 @@ printMCov cgi path = do
   Right () <- writeFile path $ show @{Colourful} cgi | Left err => die "Couldn't write the model coverage to file: \{show err}"
   pure ()
 
-finLookup : (y : FinsList n) -> (List $ Fin $ y.length) -> List $ Fin n
-finLookup xs []        = []
-finLookup xs (y :: ys) = index xs y :: finLookup xs ys
-
-selectPorts' : {mc : _} -> (mcs : MultiConnectionsVect l mc) -> List (Fin l) -> SVObjList
+selectPorts' : (mcs : MultiConnectionsList ms m subMs) -> List (Fin $ length mcs) -> SVObjList
 selectPorts' p []        = []
-selectPorts' p (x :: xs) = find p x :: selectPorts' p xs
+selectPorts' p (x :: xs) = (typeOf $ index p x) :: selectPorts' p xs
 
-tryToFitL : {to : _} -> List (Fin a) -> List (Fin to)
-tryToFitL []      = []
-tryToFitL (x::xs) = case tryToFit x of
-  Nothing => tryToFitL xs
-  Just x' => x' :: tryToFitL xs
 
 gen : Fuel -> Gen MaybeEmpty $ ExtendedModules StdModules
 gen x = do
-  rawMS <- genModules x StdModules @{genConns}
+  rawMS <- genModules x StdModules @{genFillAny}
   res <- extend x rawMS
   pure res where
     extend : Fuel -> {ms: _} -> Modules ms -> Gen MaybeEmpty $ ExtendedModules ms
     extend _ End = pure End
-    extend x modules@(NewCompositeModule m {ms} subMs {sicons} {tocons} sssi ssto cont) = do
-      -- Resolve mcs
-      let (l ** mcs) = resolveMultiConnections $ SC ms m subMs sicons tocons
-
-      -- Gen Assigns
-      let sdmcs = portsToAssign mcs
-      (rawSdAssigns ** uf) <- genUniqueFins x (sdmcs.length)
-      let sdAssigns = finLookup sdmcs rawSdAssigns.asList
-      rawMdAssigns <- genMDAssigns x mcs
-      let mdAssigns = (toFinsList rawMdAssigns).asList
-
-      -- Gen literals
-      sdLiterals <- genLiterals @{genBinVect} x $ selectPorts' mcs sdAssigns
-      mdLiterals <- genLiterals @{genBinVect} x $ selectPorts' mcs mdAssigns
-
+    extend x modules@(NewCompositeModule m {ms} subMs {mcs} _ cont) = do
       -- Extend the rest
       contEx <- extend x cont
 
-      -- Gen port types for current context
-      let ports = resolveLocalCtxPortTypes modules
+      -- Gen Assigns
+      let sdf = sdFins $ allFins $ length mcs
+      (rawSDAssigns ** sduf) <- genUF x $ sdf.length
+      let sdAssigns = listLookUp sdf rawSDAssigns
 
-      pure $ NewCompositeModule m subMs sssi ssto mcs sdAssigns sdLiterals mdAssigns mdLiterals ports contEx
+      let mdf = mdFins $ allFins $ length mcs
+      (rawMDAssigns ** mduf) <- genUF x $ mdf.length
+      let mdAssigns = listLookUp mdf rawMDAssigns
+
+      -- Gen Expressions
+      sdExprs <- genTMPExList x mcs sdAssigns
+      mdExprs <- genTMPExList x mcs mdAssigns
+
+      pure $ NewCompositeModule m subMs mcs sdAssigns sdExprs mdAssigns mdExprs contEx
 
 covering
 main : IO ()
@@ -293,8 +282,7 @@ main = do
     putStrLn usage
     exitSuccess
 
-  let cgi = initCoverageInfo'' [`{Modules}, `{LiteralsList}] -- `{SingleDrivenAssigns}, `{MultiDrivenAssigns},
-
+  let cgi = initCoverageInfo'' [`{Modules} ] -- TODO: Add expression type
   let vals = unGenTryAllD' cfg.randomSeed $ gen cfg.modelFuel >>= map (render cfg.layoutOpts) . prettyModules (limit 1000) StdModulesPV
   let vals = flip mapMaybe vals $ \gmd => snd gmd >>= \(mcov, md) : (ModelCoverage, String) =>
                                                         if nonTrivial md then Just (fst gmd, mcov, md) else Nothing

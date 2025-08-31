@@ -59,7 +59,6 @@ jobs:
   build-and-test:
     name: Build and test `${{ github.repository }}`
     needs: get-upstream-matrix
-    timeout-minutes: 228
     runs-on: ubuntu-latest
     container: ghcr.io/stefan-hoeck/idris2-pack:latest
     outputs:
@@ -172,7 +171,7 @@ jobs:
             sim_error_regex: |
               (syntax error\W[A-z-\/0-9,.:]+ .*$|(error|sorry|assert|vvp): [\S ]+$)
             extra_ignored_regexes: >
-              "Unable to elaborate r-value: ['{}d0-9]+"
+              "Unable to elaborate r-value: .*"
               "Code generation had .* error\(s\)\."
 
           - name: slang
@@ -202,7 +201,7 @@ jobs:
               sudo make install
             version: |
               verilator --version
-            run: rm -rf obj_dir && rm -f top.sv && cp {file} top.sv && verilator --cc --exe .github/workflows/conf/verilator/testbench.cpp --timing -Wno-fatal +1800-2023ext+sv top.sv
+            run: rm -rf obj_dir && rm -f top.sv && cp {file} top.sv && verilator --cc --exe .github/workflows/conf/verilator/testbench.cpp --timing -Wno-fatal --no-std +1800-2023ext+sv top.sv
             error_regex: |
               %Error(|\-[A-Z]+):( | Internal Error: )[A-z0-9-_\/]+.sv:\d+:\d+:[\S ]*$
             sim_cmd: make -C obj_dir -f Vtop.mk Vtop && ./obj_dir/Vtop
@@ -275,8 +274,6 @@ jobs:
               git submodule update --init --recursive third_party/{surelog,yosys}
               make -j$(nproc)
             install: |
-              sudo apt install -y tclsh
-              sudo pip3 install orderedmultidict
               sudo make install -j$(nproc)
             version: |
               synlig --version
@@ -337,7 +334,9 @@ jobs:
             version: yosys --version
             run: yosys -m slang -p 'read_slang {file}; hierarchy -check -top {top_module}; proc; opt; fsm; memory; sim -assert; clean'
             error_regex: >
-              ERROR:.*$
+              (ERROR|error): .*
+            extra_ignored_regexes: >
+              "Compilation failed"
 
     steps:
       - name: Checkout
@@ -419,6 +418,10 @@ jobs:
           ${{ matrix.tool.install }}
       - name: Print version
         run: ${{ matrix.tool.version }}
+      - name: Print git commit hash
+        run: |
+          cd ${{ matrix.tool.path }}
+          git rev-parse HEAD
       - name: Install runner deps
         run: sudo apt install -y bc python3 python3-pip python3-matplotlib python3-sklearn python3-numpy
       - name: Run
@@ -494,6 +497,8 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push Docker image
         id: push
