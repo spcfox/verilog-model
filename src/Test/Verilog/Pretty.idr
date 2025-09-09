@@ -82,32 +82,23 @@ Show IntegerAtomType where
   show Integer'  = "integer"
   show Time'     = "time"
 
-Show S2Value where
-  show Z = "0"
+Show (Binary s) where
   show S = "1"
-
-Show S4Value where
   show Z = "0"
-  show S = "1"
   show X = "x"
   show H = "z"
 
-Show (Binary s) where
-  show (B2 b) = show b
-  show (B4 b) = show b
-
-Show (BinaryVect l s) where
-  show bv = "'b\{showLinear bv}" where
-    showLinear : BinaryVect l' s -> String
-    showLinear []        = ""
-    showLinear (x :: xs) = show x ++ showLinear xs 
+Show (BinaryList s) where
+  show bl = "'b\{showLinear bl}" where
+    showLinear : BinaryList s -> String
+    showLinear (One  x)    = show x
+    showLinear (More x xs) = show x ++ showLinear xs
 
 Show (TypeLiteralVect l t)
 
 ||| Single bit example:
 ||| logic m;
 ||| assign m = 'b1;
-||| TODO: print literals of different random lengths
 ||| TODO: print the length of literal sometimes
 |||
 ||| UAL x example:
@@ -132,15 +123,21 @@ pn : String -> String
 pn "" = ""
 pn a = " \{a}"
 
+showBasic : SVType -> String
+showBasic (RVar x)            = show x
+showBasic (SVar x)            = show x
+showBasic (VVar x)            = show x
+showBasic (PackedArr   t k j) = showBasic t
+showBasic (UnpackedArr t k j) = showBasic t
+
 showPackedSVT : SVType -> String
 showPackedSVT (RVar x)              = show x
 showPackedSVT (SVar x)              = show x
 showPackedSVT (VVar x)              = show x
-showPackedSVT (PackedArr t {p} s e) = "\{showPackedSVT t}\{space}[\{show s}:\{show e}]" where
-  space : String
-  space = case p of
-    PA => ""
-    PS => " "
+showPackedSVT (PackedArr t {p} s e) = "\{showBasic t} [\{show s}:\{show e}]\{packDims t}" where
+  packDims : SVType -> String
+  packDims (PackedArr t s e) = "[\{show s}:\{show e}]" ++ packDims t
+  packDims _                 = ""
 showPackedSVT (UnpackedArr t   s e) = ""
 
 ||| examples:
@@ -155,14 +152,10 @@ showPackedSVT (UnpackedArr t   s e) = ""
 ||| int Array[0:7][0:31]; // array declaration using ranges
 ||| int Array[8][32];     // array declaration using sizes
 showSVType : SVType -> (name : String) -> String
-showSVType rv@(RVar x)                name = "\{showPackedSVT rv}\{pn name}"
-showSVType sv@(SVar x)                name = "\{showPackedSVT sv}\{pn name}"
-showSVType vv@(VVar x)                name = "\{showPackedSVT vv}\{pn name}"
-showSVType pa@(PackedArr   t {p} s e) name = "\{showPackedSVT t}\{space}[\{show s}:\{show e}]\{pn name}" where
-  space : String
-  space = case p of
-    PA => ""
-    PS => " "
+showSVType rv@(RVar x)                name = "\{show x}\{pn name}"
+showSVType sv@(SVar x)                name = "\{show x}\{pn name}"
+showSVType vv@(VVar x)                name = "\{show x}\{pn name}"
+showSVType pa@(PackedArr   t {p} s e) name = "\{showPackedSVT pa} \{pn name}"
 showSVType ua@(UnpackedArr t     s e) name = "\{showPackedSVT $ basic t} \{name} [\{show s}:\{show e}]\{unpDimensions t}" where
   basic : SVType -> SVType
   basic (UnpackedArr t _ _) = basic t
