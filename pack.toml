@@ -5,6 +5,18 @@
 [install]
 whitelist = [ "verilog-model" ]
 
+[custom.all.deptycheck]
+type   = "git"
+url    = "https://github.com/spcfox//deptycheck"
+commit = "c74f62a002efc65f32c707b1442c0fabfc7f271e"
+ipkg   = "deptycheck.ipkg"
+
+[custom.all.elab-util-extra]
+type   = "git"
+url    = "https://github.com/spcfox//deptycheck"
+commit = "c74f62a002efc65f32c707b1442c0fabfc7f271e"
+ipkg   = "elab-util-extra/elab-util-extra.ipkg"
+
 #################
 ### The model ###
 #################
