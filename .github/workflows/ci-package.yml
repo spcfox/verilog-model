@@ -36,30 +36,8 @@ env:
 
 jobs:
 
-  get-upstream-matrix:
-    name: Acquire matrix of upstream modes
-    runs-on: ubuntu-latest
-    container: ghcr.io/stefan-hoeck/idris2-pack:latest
-    outputs:
-      upstream-matrix: "${{ steps.get-upstream-matrix.outputs.upstream-matrix }}"
-    steps:
-      - name: Install Git
-        run: apt-get update && apt-get install git
-      - name: Get upstream matrix
-        id: get-upstream-matrix
-        run: |
-          CURR="$(idris2 --version | sed 's/.*-//')"
-          MAIN="$(git ls-remote https://github.com/idris-lang/Idris2 main | head -c 9)"
-          echo "Current: $CURR, bleeding edge: $MAIN"
-          if [ "$CURR" == "$MAIN" ]; then
-            echo 'upstream-matrix=["latest-pack-collection"]'
-          else
-            echo 'upstream-matrix=["latest-pack-collection", "bleeding-edge-compiler"]'
-          fi >> "$GITHUB_OUTPUT"
-
   build-and-test:
     name: Build and test `${{ github.repository }}`
-    needs: get-upstream-matrix
     runs-on: ubuntu-latest
     container: ghcr.io/stefan-hoeck/idris2-pack:latest
     outputs:
@@ -67,41 +45,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        upstream-mode: ${{ fromJSON(needs.get-upstream-matrix.outputs.upstream-matrix) }}
+        collection: [nightly-251021, nightly-251022]
+        idris2-commit: ['', ab81660dcd63ce8ad9d380f1033993db2684a623, 473fbc8cc8022a1cb487529658b23f92e1b80514]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Calculate cache key
-        id: cache-key
-        run: |
-          echo "key=build-${{ hashFiles('src/**', 'verilog-model.ipkg', 'pack.toml') }}-${{ matrix.upstream-mode }}" >> $GITHUB_OUTPUT
-      - name: Restore from cache
-        id: cache-build
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ env.BUILD_DIR }}
-          key: ${{ steps.cache-key.outputs.key }}
-      - name: Touch files
-        if: steps.cache-build.outputs.cache-hit == 'true'
-        run: |
-          find "${{ env.BUILD_DIR }}" -type f -exec touch {} +
-          sync
       - name: Update `pack-db`
         run: pack update-db
-      - name: Switch to the latest compiler, if needed
-        if: matrix.upstream-mode == 'bleeding-edge-compiler'
+      - name: Switch to the `${{ matrix.idris2-commit }}` commit
+        if: matrix.idris2-commit != ''
         run: |
-          { echo; echo "[idris2]"; echo 'commit = "latest:main"'; } >> pack.toml
+          { echo; echo "[idris2]"; echo 'commit = "${{ matrix.idris2-commit }}"'; } >> pack.toml
           pack fetch
-      - name: Switch to the latest collection
-        run: pack switch latest
+      - name: Switch to the `${{ matrix.collection }}` collection
+        run: pack switch ${{ matrix.collection }}
       - name: Build `${{ env.PACKAGE_NAME }}`
         run: pack build ${{ env.PACKAGE_NAME }}
-      - name: Save build
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ env.BUILD_DIR }}
-          key: ${{ steps.cache-key.outputs.key }}
       - name: Fix file system  ¯\_(ツ)_/¯
         run: |
           set -x +e
@@ -110,17 +69,6 @@ jobs:
           touch tests/printer/create-dir/dummy
       - name: Test ${{ env.PACKAGE_NAME }}
         run: pack test ${{ env.PACKAGE_NAME }}
-      - name: Gen SystemVerilog modules
-        if: matrix.upstream-mode == 'latest-pack-collection'
-        run : pack run ${{ env.PACKAGE_NAME }} --to "${{ env.GENERATION_DIR }}" -n 128 --seed-name --seed-content --coverage mcov  # Generate modules
-      - name: Show mcov
-        if: matrix.upstream-mode == 'latest-pack-collection'
-        run : cat mcov
-      - uses: actions/upload-artifact@v4
-        if: matrix.upstream-mode == 'latest-pack-collection'
-        with:
-          name: generated-modules
-          path: "${{ env.GENERATION_DIR }}"
 
   # run-tools:
   #   name: ${{ matrix.tool.name }}
