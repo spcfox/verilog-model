@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - master
+      - ci/*
     tags:
       - '**'
   pull_request:
