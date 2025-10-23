@@ -46,16 +46,19 @@ jobs:
       fail-fast: false
       matrix:
         collection: [nightly-251021, nightly-251022]
-        idris2-commit: ['', ab81660dcd63ce8ad9d380f1033993db2684a623, 473fbc8cc8022a1cb487529658b23f92e1b80514]
+        idris2-commit: [ab81660dcd63ce8ad9d380f1033993db2684a623, 473fbc8cc8022a1cb487529658b23f92e1b80514]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Update `pack-db`
         run: pack update-db
+      - name: Switch to the `nightly-250918` collection
+        run: pack switch nightly-250918
+      - name: Remove other collections
+        run: echo "yes" | pack gc
       - name: Switch to the `${{ matrix.idris2-commit }}` commit
-        if: matrix.idris2-commit != ''
         run: |
-          { echo; echo "[idris2]"; echo 'commit = "${{ matrix.idris2-commit }}"'; } >> pack.toml
+          { echo; echo "[idris2]"; echo 'commit = "${{ matrix.idris2-commit }}"'; echo 'bootstrap = false'; } >> pack.toml
           pack fetch
       - name: Switch to the `${{ matrix.collection }}` collection
         run: pack switch ${{ matrix.collection }}
