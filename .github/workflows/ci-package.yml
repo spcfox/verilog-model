@@ -73,17 +73,17 @@ jobs:
         id: cache-key
         run: |
           echo "key=build-${{ hashFiles('src/**', 'verilog-model.ipkg', 'pack.toml') }}-${{ matrix.upstream-mode }}" >> $GITHUB_OUTPUT
-      - name: Restore from cache
-        id: cache-build
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ env.BUILD_DIR }}
-          key: ${{ steps.cache-key.outputs.key }}
-      - name: Touch files
-        if: steps.cache-build.outputs.cache-hit == 'true'
-        run: |
-          find "${{ env.BUILD_DIR }}" -type f -exec touch {} +
-          sync
+      # - name: Restore from cache
+      #   id: cache-build
+      #   uses: actions/cache/restore@v4
+      #   with:
+      #     path: ${{ env.BUILD_DIR }}
+      #     key: ${{ steps.cache-key.outputs.key }}
+      # - name: Touch files
+      #   if: steps.cache-build.outputs.cache-hit == 'true'
+      #   run: |
+      #     find "${{ env.BUILD_DIR }}" -type f -exec touch {} +
+      #     sync
       - name: Update `pack-db`
         run: pack update-db
       - name: Switch to the latest compiler, if needed
