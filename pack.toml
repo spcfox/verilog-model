@@ -1,6 +1,6 @@
 [idris2]
 url = "https://github.com/spcfox/Idris2"
-commit = "0d27baded272459134dadec7c97acd06f7ab9252"
+commit = "7f3ebfdf27a87a55f2fd674752df183c5a9a30dc"
 
 [custom.all.deptycheck]
 type   = "git"
