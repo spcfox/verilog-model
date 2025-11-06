@@ -1,3 +1,13 @@
+[idris2]
+url = "https://github.com/spcfox/Idris2"
+commit = "0d27baded272459134dadec7c97acd06f7ab9252"
+
+[custom.all.deptycheck]
+type   = "git"
+url    = "https://github.com/spcfox/deptycheck"
+commit = "007f63246759a6d43d82efcc5c1167774a8829b0"
+ipkg   = "deptycheck.ipkg"
+
 ################
 ### Settings ###
 ################
